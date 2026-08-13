@@ -1,0 +1,17 @@
+{
+  "name": "networkpeer-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:contracts": "npm run build --workspace @networkpeer/contracts",
+    "typecheck:contracts": "npm run typecheck --workspace @networkpeer/contracts",
+    "typecheck:api": "npm run typecheck --workspace networkpeer-api",
+    "typecheck:web": "npm run typecheck --workspace networkpeer-web",
+    "typecheck:mobile": "npm run typecheck --workspace networkpeer-mobile",
+    "test:api": "npm test --workspace networkpeer-api"
+  }
+}

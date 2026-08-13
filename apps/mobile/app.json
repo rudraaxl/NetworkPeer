@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "NetworkPeers Worker",
+    "slug": "networkpeers-worker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "networkpeers",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.networkpeers.worker",
+      "infoPlist": {
+        "NSCameraUsageDescription": "NetworkPeers records live photo and video evidence for job verification.",
+        "NSMicrophoneUsageDescription": "NetworkPeers records audio evidence for job verification.",
+        "NSLocationWhenInUseUsageDescription": "NetworkPeers attaches GPS coordinates to evidence for fraud checks."
+      }
+    },
+    "android": {
+      "package": "com.networkpeers.worker",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NetworkPeers records live photo and video evidence for job verification."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NetworkPeers attaches GPS coordinates to evidence for fraud checks."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "NetworkPeers records audio evidence for job verification."
+        }
+      ],
+      "expo-video",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-asset"
+    ]
+  }
+}

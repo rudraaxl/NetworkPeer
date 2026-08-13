@@ -3,12 +3,22 @@ name: NetworkPeer CI
 on:
   pull_request:
     paths:
-      - "NetworkPeer-main/**"
+      - "apps/api/**"
+      - "apps/web/**"
+      - "apps/mobile/**"
+      - "packages/contracts/**"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/deploy.yml"
   push:
     branches: [main]
     paths:
-      - "NetworkPeer-main/**"
+      - "apps/api/**"
+      - "apps/web/**"
+      - "apps/mobile/**"
+      - "packages/contracts/**"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
@@ -19,9 +29,6 @@ jobs:
   verify-and-build:
     name: Verify API and Build Image
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: NetworkPeer-main
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/networkpeer_e2e
@@ -65,28 +72,87 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: NetworkPeer-main/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Build shared contracts
+        run: npm run build:contracts
+
       - name: Lint
+        working-directory: apps/api
         run: npm run lint
 
       - name: Type check
+        working-directory: apps/api
         run: npm run typecheck
 
       - name: Build API
+        working-directory: apps/api
         run: npm run build
 
       - name: Run unit tests
+        working-directory: apps/api
         run: npm test
 
       - name: Apply migrations to isolated E2E database
+        working-directory: apps/api
         run: npm run migrate
 
       - name: Run funded job acceptance E2E test
+        working-directory: apps/api
         run: npm run test:e2e
 
       - name: Build production Docker image
+        working-directory: apps/api
         run: docker build --target runtime --tag networkpeer-api:${{ github.sha }} .
+
+  verify-web:
+    name: Verify Web Platform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared contracts
+        run: npm run build:contracts
+
+      - name: Type check web
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Build web
+        working-directory: apps/web
+        run: npm run build
+
+  verify-mobile:
+    name: Verify Mobile App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared contracts
+        run: npm run build:contracts
+
+      - name: Type check mobile
+        working-directory: apps/mobile
+        run: npm run typecheck

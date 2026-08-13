@@ -3,3 +3,36 @@
 
 # macOS junk
 .DS_Store
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.output/
+.vinxi/
+.tanstack/
+.wrangler/
+.expo/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# TypeScript
+*.tsbuildinfo
