@@ -7,9 +7,15 @@ set -eu
 BUCKET="${AWS_S3_BUCKET:-networkpeer-media-staging}"
 REGION="${AWS_REGION:-ap-south-1}"
 
-echo "Creating S3 bucket: $BUCKET ($REGION)"
+echo "Ensuring S3 bucket exists: $BUCKET ($REGION)"
 
-aws s3 mb "s3://${BUCKET}" --region "$REGION"
+# The bucket may already exist from an earlier run. `aws s3 mb` fails with
+# BucketAlreadyOwnedByYou in that case, which is fine for idempotent setup.
+if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+  echo "Bucket $BUCKET already exists; skipping creation."
+else
+  aws s3 mb "s3://${BUCKET}" --region "$REGION"
+fi
 
 aws s3api put-bucket-versioning \
   --bucket "$BUCKET" \
