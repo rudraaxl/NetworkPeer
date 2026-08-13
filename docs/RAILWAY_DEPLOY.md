@@ -150,16 +150,17 @@ git push -u origin main
 
 ### 2.3 Configure the API service
 
-Set the **Root Directory** to `apps/api`.
+Set the **Root Directory** to the repo root (NOT `apps/api`). This is critical
+because the npm workspaces and shared contracts package live at the root.
 
 **Build command:**
 ```bash
-npm ci && npm run build
+npm ci && npm run build:contracts && npm run build --workspace networkpeer-api
 ```
 
 **Start command:**
 ```bash
-node dist/index.js
+node apps/api/dist/index.js
 ```
 
 **Environment variables** (Railway → Variables tab):
@@ -220,11 +221,20 @@ against the Railway Postgres URL:
 ```bash
 cd /Users/rudraaxlakra/Downloads/NETWORKPEER/apps/api
 
+export NODE_ENV=test
 export DATABASE_URL="<paste Railway Postgres DATABASE_URL>?sslmode=require"
+export REDIS_URL="<paste Railway Redis REDIS_URL>"
+export PAYMENT_GATEWAY=stub
+export PAYMENT_WEBHOOK_SECRET=ci-payment-webhook-secret-1234567890
+export PAYMENT_DISPATCH_ENABLED=false
+export BACKGROUND_QUEUES_ENABLED=false
+export LOG_PRETTY=false
 npm run migrate
 ```
 
 > Railway's Postgres URL may not include `sslmode=require`. Append it manually.
+> The `NODE_ENV=test` setting avoids the strict production validation, which
+> requires Stripe/Twilio and is not relevant for the free beta.
 
 ### 2.5 Verify the API
 
