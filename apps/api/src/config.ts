@@ -77,9 +77,11 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url().default(DEFAULT_DATABASE_URL),
   // Privileged workflows use isolated DB principals in production. They fall
   // back to DATABASE_URL only for local development and integration tests.
-  DATABASE_ADMIN_URL: z.string().url().optional(),
-  DATABASE_MEDIA_VERIFIER_URL: z.string().url().optional(),
-  DATABASE_FINANCIAL_URL: z.string().url().optional(),
+  // Empty strings (common when a hosted env var is present but unset) are
+  // normalized to undefined so the fallback still applies.
+  DATABASE_ADMIN_URL: z.string().url().optional().or(z.literal("")).transform((v) => v || undefined),
+  DATABASE_MEDIA_VERIFIER_URL: z.string().url().optional().or(z.literal("")).transform((v) => v || undefined),
+  DATABASE_FINANCIAL_URL: z.string().url().optional().or(z.literal("")).transform((v) => v || undefined),
   DATABASE_POOL_MIN: z.coerce.number().int().min(0).default(2),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(10),
   // Docker Compose can opt into plaintext only on its private bridge network.
