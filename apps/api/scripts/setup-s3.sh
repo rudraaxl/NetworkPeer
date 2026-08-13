@@ -66,14 +66,19 @@ cat <<'POLICY'
     {
       "Effect": "Allow",
       "Action": [
+        "s3:CreateBucket",
+        "s3:ListBucket",
+        "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketCORS",
+        "s3:GetBucketCORS",
         "s3:PutObject",
         "s3:GetObject",
-        "s3:PutObjectTagging",
-        "s3:GetBucketPublicAccessBlock",
-        "s3:GetEncryptionConfiguration",
-        "s3:GetBucketVersioning",
-        "s3:PutBucketCORS",
-        "s3:ListBucket"
+        "s3:PutObjectTagging"
       ],
       "Resource": [
         "arn:aws:s3:::BUCKET_NAME_HERE",
