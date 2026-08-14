@@ -69,6 +69,8 @@ function CreateJob() {
   const [address, setAddress] = useState("");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [description, setDescription] = useState("");
+  const [publicTitle, setPublicTitle] = useState("");
+  const [publicDescription, setPublicDescription] = useState("");
   const [paymentInput, setPaymentInput] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [countInput, setCountInput] = useState(String(items.length));
@@ -146,6 +148,11 @@ function CreateJob() {
       setFormError("Description must contain at least 10 characters.");
       return;
     }
+    const normalizedPublicTitle = publicTitle.trim();
+    if (normalizedPublicTitle && normalizedPublicTitle.length < 3) {
+      setFormError("Public title must contain at least 3 characters.");
+      return;
+    }
     if (!Number.isSafeInteger(budgetCents) || budgetCents <= 0 || budgetCents > 1_000_000_000) {
       setFormError("Payment must be a whole INR amount between ₹1 and ₹10,000,000.");
       return;
@@ -185,6 +192,8 @@ function CreateJob() {
         ...(normalizedAddress ? { address: normalizedAddress } : {}),
         ...(deadlineIso ? { scheduled_at: deadlineIso } : {}),
         idempotency_key: idempotencyKeyRef.current,
+        public_title: normalizedPublicTitle || normalizedTitle,
+        public_description: publicDescription.trim() || normalizedDescription.slice(0, 2000),
         subtasks: populatedItems.map((item) => ({
           title: item.title.trim(),
           ...(item.instructions.trim() ? { description: item.instructions.trim() } : {}),
@@ -200,7 +209,18 @@ function CreateJob() {
       toast.error(message);
       setSubmitState("idle");
     }
-  }, [address, budgetCents, category, description, items, location, scheduledAt, title]);
+  }, [
+    address,
+    budgetCents,
+    category,
+    description,
+    items,
+    location,
+    publicDescription,
+    publicTitle,
+    scheduledAt,
+    title,
+  ]);
 
   const postAnother = useCallback(() => {
     idempotencyKeyRef.current = null;
@@ -309,6 +329,35 @@ function CreateJob() {
                   onChange={(event) => setDescription(event.target.value)}
                   maxLength={10_000}
                   placeholder="Describe the task, access instructions, and anything the worker should know."
+                />
+              </label>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="What workers will see"
+            description="Workers see this anonymized version until they are assigned the job. Leave blank to show your title and description."
+          >
+            <div className="grid gap-4">
+              <label>
+                <span className={labelCls()}>Public title</span>
+                <input
+                  className={inputCls}
+                  value={publicTitle}
+                  onChange={(event) => setPublicTitle(event.target.value)}
+                  maxLength={255}
+                  placeholder={title.trim() || "e.g. Photography task near you"}
+                />
+              </label>
+              <label>
+                <span className={labelCls()}>Public description</span>
+                <textarea
+                  rows={3}
+                  className={inputCls}
+                  value={publicDescription}
+                  onChange={(event) => setPublicDescription(event.target.value)}
+                  maxLength={2000}
+                  placeholder="Privacy-safe summary. Keep exact addresses and business names out of this field."
                 />
               </label>
             </div>
