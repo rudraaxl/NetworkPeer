@@ -3,10 +3,49 @@ import {
   claimPaymentOperationsForDispatch,
   markPaymentOperationDispatched,
   releasePaymentOperationDispatch,
+  settlePaymentWebhook,
   type DispatchablePaymentOperation,
+  type PaymentOperationState,
+  type PaymentOperationType,
 } from "../repository.js";
 import { PaymentGatewayError, type PaymentGateway } from "./payment-gateway-service.js";
 import { captureException, logger } from "../observability.js";
+
+/**
+ * In stub (demo) gateway mode there is no Stripe to fire the completion
+ * webhook, so a dispatched operation is settled immediately. Real Stripe
+ * deployments skip this entirely and rely on the payment webhook.
+ */
+export async function autoSettleStubOperation(input: {
+  operationId: string;
+  operationType: PaymentOperationType;
+  providerReference: string | null;
+}): Promise<PaymentOperationState | null> {
+  if (config.PAYMENT_GATEWAY !== "stub" || !input.providerReference) return null;
+  try {
+    await settlePaymentWebhook({
+      provider: "STUB",
+      providerEventId: `evt_stub_auto_${input.operationId}`,
+      providerReference: input.providerReference,
+      eventType: input.operationType === "FUNDING" ? "payment_intent.succeeded" : "transfer.created",
+      outcome: "SUCCEEDED",
+      payload: {
+        object: {
+          id: input.providerReference,
+          metadata: { networkpeer_operation_id: input.operationId },
+        },
+      },
+    });
+    logger.info(
+      { operationId: input.operationId, operationType: input.operationType },
+      "stub payment operation auto-settled",
+    );
+    return { status: "SUCCEEDED", providerReference: input.providerReference };
+  } catch (err) {
+    logger.warn({ err, operationId: input.operationId }, "stub payment operation auto-settle failed");
+    return null;
+  }
+}
 
 function dispatchFailureCode(err: unknown): string {
   if (err instanceof PaymentGatewayError) return err.code;
@@ -91,6 +130,11 @@ export class PaymentDispatchRuntime {
           clientSecret: result.clientSecret,
         });
         logger.info({ operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatched");
+        await autoSettleStubOperation({
+          operationId: operation.operationId,
+          operationType: operation.operationType,
+          providerReference: result.providerReference,
+        });
         return;
       }
 
@@ -110,6 +154,11 @@ export class PaymentDispatchRuntime {
         providerReference: result.providerReference,
       });
       logger.info({ operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatched");
+      await autoSettleStubOperation({
+        operationId: operation.operationId,
+        operationType: operation.operationType,
+        providerReference: result.providerReference,
+      });
     } catch (err) {
       logger.warn({ err, operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatch released for retry");
       await releasePaymentOperationDispatch(operation.operationId, dispatchFailureCode(err));

@@ -20,6 +20,7 @@ import {
   type PaymentGateway,
   type NormalizedPaymentWebhook,
 } from "./payment-gateway-service.js";
+import { autoSettleStubOperation } from "./payment-dispatch-service.js";
 
 export class LedgerServiceError extends Error {
   constructor(
@@ -121,10 +122,15 @@ export class LedgerService {
         providerReference: gatewayResult.providerReference,
         clientSecret: gatewayResult.clientSecret,
       });
+      const settled = await autoSettleStubOperation({
+        operationId: claimedOperation.operationId,
+        operationType: claimedOperation.operationType,
+        providerReference: dispatched.providerReference,
+      });
       return {
         ...operation,
-        status: dispatched.status,
-        providerReference: dispatched.providerReference,
+        status: settled?.status ?? dispatched.status,
+        providerReference: settled?.providerReference ?? dispatched.providerReference,
         clientSecret: dispatched.clientSecret,
       };
     } catch (err) {
@@ -204,10 +210,16 @@ export class LedgerService {
         operationId: claimedOperation.operationId,
         providerReference: gatewayResult.providerReference,
       });
+      await autoSettleStubOperation({
+        operationId: claimedOperation.operationId,
+        operationType: claimedOperation.operationType,
+        providerReference: dispatched.providerReference,
+      });
+      const payout = await getPaymentOperationState(settlement.payoutOperationId);
       return {
         ...settlement,
-        payoutStatus: dispatched.status,
-        payoutProviderReference: dispatched.providerReference,
+        payoutStatus: payout.status,
+        payoutProviderReference: payout.providerReference,
         payoutDispatchPending: false,
       };
     } catch (err) {
