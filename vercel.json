@@ -3,5 +3,5 @@
   "framework": "tanstack-start",
   "buildCommand": "npm run build --workspace @networkpeer/contracts && npm run build --workspace networkpeer-web",
   "installCommand": "npm ci --include=dev",
-  "outputDirectory": ".vercel/output"
+  "outputDirectory": "apps/web/.vercel/output"
 }
