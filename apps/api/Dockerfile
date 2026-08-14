@@ -9,6 +9,7 @@ RUN npm ci
 
 FROM dependencies AS build
 COPY packages/contracts/tsconfig.json packages/contracts/tsconfig.json
+COPY packages/contracts/build.mjs packages/contracts/build.mjs
 COPY packages/contracts/src packages/contracts/src
 COPY apps/api/tsconfig.json apps/api/tsconfig.json
 COPY apps/api/src apps/api/src
