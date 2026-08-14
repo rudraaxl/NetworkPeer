@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "tanstack-start",
-  "buildCommand": "npm run build --workspace @networkpeer/contracts && NITRO_PRESET=vercel npm run build --workspace networkpeer-web",
-  "installCommand": "npm ci --include=dev",
+  "buildCommand": "NODE_ENV=development npm run build --workspace @networkpeer/contracts && NODE_ENV=development NITRO_PRESET=vercel npm run build --workspace networkpeer-web",
+  "installCommand": "NODE_ENV=development npm ci",
   "outputDirectory": "apps/web/.vercel/output"
 }
