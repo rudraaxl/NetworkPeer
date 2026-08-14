@@ -1,5 +1,9 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+if (process.argv.includes("build")) {
+  process.env.NODE_ENV = "production";
+}
+
 export default defineConfig({
   tanstackStart: {},
   nitro: {
