@@ -7,7 +7,17 @@ import { config } from "../src/config.js";
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "migrations");
 
 async function runMigrations() {
-  const client = new pg.Client({ connectionString: config.DATABASE_URL });
+  const isRailwayProxy = config.DATABASE_URL.includes("proxy.rlwy.net");
+  // Railway's public TCP proxy presents a self-signed cert. Its `sslmode=require`
+  // query param would force strict verification, so strip it and use an explicit
+  // non-verifying SSL config for this short-lived migration connection.
+  const connectionString = isRailwayProxy
+    ? config.DATABASE_URL.replace(/([?&])sslmode=[^&]+/g, "$1").replace(/[?&]$/, "")
+    : config.DATABASE_URL;
+  const client = new pg.Client({
+    connectionString,
+    ssl: isRailwayProxy ? { rejectUnauthorized: false } : undefined,
+  });
   await client.connect();
   await client.query(`SELECT pg_advisory_lock(hashtext('networkpeer:migrations'))`);
 
