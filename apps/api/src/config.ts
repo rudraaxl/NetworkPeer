@@ -43,8 +43,26 @@ function isValidS3BucketName(value: string): boolean {
   );
 }
 
-function parseCorsOrigins(value: string): string[] {
-  return value.split(",").map((origin) => origin.trim()).filter(Boolean);
+function normalizeOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+// Origins are normalized through URL.origin so trailing slashes, uppercase
+// hostnames, and default ports never cause a byte-mismatch against the
+// browser-supplied Origin header. Invalid entries are kept as trimmed strings
+// to preserve prior behavior (production schema still rejects non-HTTPS).
+export function parseCorsOrigins(value: string): string[] {
+  const seen = new Set<string>();
+  for (const raw of value.split(",")) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    seen.add(normalizeOrigin(trimmed) ?? trimmed);
+  }
+  return [...seen];
 }
 
 function parseTrustedProxyCidrs(value: string): string[] {

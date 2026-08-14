@@ -2,7 +2,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
-import { config } from "./config.js";
+import { config, parseCorsOrigins } from "./config.js";
 import { pool, redis, closeConnections } from "./db.js";
 import { fail } from "./contracts.js";
 import systemRoutes from "./routes/system.js";
@@ -73,10 +73,21 @@ export type BuildAppOptions = {
   backgroundRuntime?: BackgroundRuntime;
 };
 
+function normalizeOrigin(input: string): string | null {
+  try {
+    return new URL(input).origin;
+  } catch {
+    return null;
+  }
+}
+
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   initializeObservability();
-  const allowedOrigins = new Set(
-    config.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
+  const allowedOrigins = new Set(parseCorsOrigins(config.CORS_ORIGINS));
+  const allowAllOrigins = config.NODE_ENV !== "production";
+  logger.info(
+    { allowedOrigins: [...allowedOrigins], allowAllOrigins, nodeEnv: config.NODE_ENV },
+    "CORS configured",
   );
   const app = Fastify({
     bodyLimit: config.MAX_REQUEST_BODY_BYTES,
@@ -101,7 +112,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(cors, {
     origin: (origin, callback) => {
       // Non-browser clients do not send Origin. Browser origins must be explicit.
-      callback(null, origin === undefined || allowedOrigins.has(origin));
+      if (origin === undefined) {
+        callback(null, true);
+        return;
+      }
+      // Temporary workaround: outside production, reflect any browser origin so
+      // the web frontend and mobile integration stay unblocked regardless of the
+      // CORS_ORIGINS value actually applied by the host (Railway env propagation
+      // has been observed to lag). Production stays strict exact-list matching.
+      if (config.NODE_ENV !== "production") {
+        callback(null, true);
+        return;
+      }
+      const normalized = normalizeOrigin(origin);
+      callback(null, normalized !== null && allowedOrigins.has(normalized));
     },
     credentials: false,
     methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
