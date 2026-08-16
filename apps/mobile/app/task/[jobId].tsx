@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import * as Crypto from "expo-crypto";
-import * as FileSystem from "expo-file-system/legacy";
 import { api } from "@/lib/api";
-import { getCurrentLocation } from "@/lib/location";
 import type { WorkerJobDetail } from "@/lib/types";
-import { jobStatusLabel } from "@/lib/types";
 import CaptureModal from "@/components/CaptureModal";
+import { flushPendingEvidence, listPendingEvidence, subscribePendingEvidence, type PendingEvidence } from "@/lib/evidenceQueue";
 import { colors, radii, shadow, spacing, typography } from "@/lib/theme";
 import { EmptyState, InfoBanner, LoadingState, PrimaryButton } from "@/components/ui";
 
-type CapturedState = Record<string, { uploaded: boolean; mediaId?: string }>;
+type CapturedState = Record<string, { uploaded: boolean; mediaId?: string; localId?: string }>;
 
 export default function TaskScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
@@ -25,6 +22,8 @@ export default function TaskScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingEvidence[]>([]);
+  const [retrying, setRetrying] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -41,11 +40,57 @@ export default function TaskScreen() {
     load();
   }, [load]);
 
-  async function handleCaptureDone(staged: { uploaded: boolean; mediaId?: string }) {
+  const refreshPending = useCallback(async () => {
+    const entries = await listPendingEvidence(jobId);
+    setPending(entries);
+    const pendingIds = new Set(entries.map((e) => e.id));
+    setCaptured((prev) => {
+      let changed = false;
+      const next: CapturedState = {};
+      for (const [key, value] of Object.entries(prev)) {
+        if (!value.uploaded && value.localId && !pendingIds.has(value.localId)) {
+          next[key] = { uploaded: true, mediaId: value.mediaId, localId: value.localId };
+          changed = true;
+        } else {
+          next[key] = value;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [jobId]);
+
+  useEffect(() => {
+    refreshPending();
+    return subscribePendingEvidence(refreshPending);
+  }, [refreshPending]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPending();
+    }, [refreshPending]),
+  );
+
+  async function handleRetry() {
+    setRetrying(true);
+    try {
+      const result = await flushPendingEvidence({ force: true });
+      await refreshPending();
+      if (result.remaining > 0) {
+        Alert.alert("Still pending", "Some captures could not be uploaded yet. Check your connection and retry.");
+      }
+    } catch {
+      Alert.alert("Still pending", "Uploads could not be completed right now. Try again shortly.");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function handleCaptureDone(staged: { localId: string; localUri: string; uploaded: boolean; mediaId?: string }) {
     if (!capturing) return;
     const key = `${capturing.subtaskId}:${capturing.mediaType}`;
-    setCaptured((prev) => ({ ...prev, [key]: { uploaded: staged.uploaded, mediaId: staged.mediaId } }));
+    setCaptured((prev) => ({ ...prev, [key]: { uploaded: staged.uploaded, mediaId: staged.mediaId, localId: staged.localId || undefined } }));
     setCapturing(null);
+    await refreshPending();
   }
 
   async function handleSubmit() {
@@ -121,8 +166,26 @@ export default function TaskScreen() {
           <Text style={styles.gpsNote}>GPS and timestamp attach automatically on every capture.</Text>
         </View>
 
+        {pending.length > 0 && (
+          <View style={styles.pendingCard}>
+            <InfoBanner
+              tone="warning"
+              icon="cloud-offline-outline"
+              title={`${pending.length} capture${pending.length === 1 ? "" : "s"} waiting to upload`}
+              body="Saved on this phone. Uploads automatically while the app is open; you can also force it now."
+            />
+            <PrimaryButton
+              label={retrying ? "Uploading..." : "Retry uploads now"}
+              onPress={handleRetry}
+              disabled={retrying}
+              loading={retrying}
+            />
+          </View>
+        )}
+
         {job.subtasks.map((subtask, i) => {
           const done = captured[`${subtask.id}:IMAGE`]?.uploaded || captured[`${subtask.id}:VIDEO`]?.uploaded || captured[`${subtask.id}:AUDIO`]?.uploaded;
+          const queued = pending.filter((e) => e.subtaskId === subtask.id);
           return (
             <View key={subtask.id} style={[styles.checklistCard, done && styles.cardDone]}>
               <View style={styles.checklistHeader}>
@@ -137,16 +200,22 @@ export default function TaskScreen() {
 
               {subtask.is_required && (
                 <Pressable
-                  style={[styles.captureRow, done && styles.captureRowDone]}
+                  style={[styles.captureRow, done && styles.captureRowDone, queued.length > 0 && styles.captureRowQueued]}
                   onPress={() => !done && setCapturing({ subtaskId: subtask.id, mediaType: "IMAGE" })}
                   accessibilityRole="button"
                 >
                   <View style={[styles.mediaIcon, done && styles.mediaIconDone]}>
-                    <Ionicons name={done ? "checkmark-circle" : "camera-outline"} size={18} color={done ? colors.success : colors.primary} />
+                    <Ionicons name={done ? "checkmark-circle" : "cloud-upload-outline"} size={18} color={done ? colors.success : colors.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.captureLabel}>{done ? "Evidence captured" : "Capture evidence"}</Text>
-                    <Text style={styles.captureHint}>{done ? "Uploaded with GPS and timestamp" : "Opens live in-app capture"}</Text>
+                    <Text style={styles.captureLabel}>{done ? "Evidence captured" : queued.length > 0 ? "Capture waiting to upload" : "Capture evidence"}</Text>
+                    <Text style={styles.captureHint}>
+                      {done
+                        ? "Uploaded with GPS and timestamp"
+                        : queued.length > 0
+                          ? `${queued.length} file${queued.length === 1 ? "" : "s"} saved on this phone — uploads automatically when the connection recovers`
+                          : "Opens live in-app capture"}
+                    </Text>
                   </View>
                   {done ? <Ionicons name="checkmark-circle" size={20} color={colors.success} /> : <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />}
                 </Pressable>
@@ -224,6 +293,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   captureRowDone: { backgroundColor: colors.successSoft, borderColor: colors.successBorder },
+  captureRowQueued: { backgroundColor: colors.warningSoft, borderColor: colors.warningBorder },
+  pendingCard: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
   mediaIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
   mediaIconDone: { backgroundColor: "#D1FAE5" },
   captureLabel: { ...typography.bodyStrong },

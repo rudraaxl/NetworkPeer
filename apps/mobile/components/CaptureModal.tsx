@@ -3,11 +3,11 @@ import { ActivityIndicator, Alert, Modal, Platform, Pressable, StyleSheet, Text,
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from "expo-audio";
 import * as Application from "expo-application";
-import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import Constants from "expo-constants";
 import { getCurrentLocation } from "@/lib/location";
-import { api } from "@/lib/api";
+import { sha256HexOfFile } from "@/lib/sha256";
+import { enqueuePendingEvidence, uploadPendingEvidence } from "@/lib/evidenceQueue";
 
 type CaptureModalProps = {
   visible: boolean;
@@ -45,10 +45,7 @@ function mimeFor(mediaType: "IMAGE" | "VIDEO" | "AUDIO", uri: string): string {
 }
 
 async function sha256Hex(uri: string): Promise<string> {
-  const data = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, data);
+  return sha256HexOfFile(uri);
 }
 
 export default function CaptureModal({ visible, jobId, subtaskId, mediaType, onDone, onCancel }: CaptureModalProps) {
@@ -129,8 +126,10 @@ export default function CaptureModal({ visible, jobId, subtaskId, mediaType, onD
       const size = typeof info.size === "number" ? info.size : 0;
       const checksum = await sha256Hex(localUri);
       const mimeType = mimeFor(mediaType, localUri);
+      const idempotencyKey = randomId(subtaskId);
 
-      const reservation = await api.reserveEvidenceUpload({
+      const entry = await enqueuePendingEvidence({
+        localUri,
         jobId,
         subtaskId,
         mediaType,
@@ -139,28 +138,22 @@ export default function CaptureModal({ visible, jobId, subtaskId, mediaType, onD
         capturedAt,
         location: { type: "Point", coordinates: [location.longitude, location.latitude] },
         checksumSha256: checksum,
-        idempotencyKey: randomId(subtaskId),
+        idempotencyKey,
       });
 
-      if (reservation.upload) {
-        const form = new FormData();
-        for (const [name, value] of Object.entries(reservation.upload.fields)) {
-          form.append(name, value);
+      try {
+        const confirmed = await uploadPendingEvidence(entry);
+        if (mountedRef.current) {
+          onDone({ localId: entry.id, localUri, uploaded: true, mediaId: confirmed.evidenceId });
         }
-        form.append("file", {
-          uri: localUri,
-          name: localUri.split("/").pop() ?? "evidence",
-          type: mimeType,
-        } as unknown as Blob);
-        const uploadResponse = await fetch(reservation.upload.url, { method: "POST", body: form });
-        if (!uploadResponse.ok) {
-          throw new Error(`Upload rejected (${uploadResponse.status})`);
+      } catch (e) {
+        if (mountedRef.current) {
+          Alert.alert(
+            "Upload pending",
+            `${e instanceof Error ? e.message : "Could not reach the server"}. The capture is saved on this phone and will upload automatically when the connection recovers.`,
+          );
+          onDone({ localId: entry.id, localUri, uploaded: false });
         }
-      }
-
-      const confirmed = await api.confirmEvidence(reservation.evidence.id);
-      if (mountedRef.current) {
-        onDone({ localId: reservation.evidence.id, localUri, uploaded: true, mediaId: confirmed.id });
       }
     } catch (e) {
       if (mountedRef.current) {
