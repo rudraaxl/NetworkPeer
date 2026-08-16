@@ -507,11 +507,11 @@ export const api = {
     return request("/worker/wallet");
   },
   workerProfile(): Promise<{
-    verification_status: string;
-    preferred_radius_km: number;
-    is_available: boolean;
-    current_location: { type: "Point"; coordinates: [number, number] } | null;
-    last_location_update: string | null;
+    verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "SUSPENDED";
+    preferredRadiusKm: number;
+    isAvailable: boolean;
+    currentLocation: { type: "Point"; coordinates: [number, number] } | null;
+    lastLocationUpdate: string | null;
   }> {
     return request("/worker/profile");
   },

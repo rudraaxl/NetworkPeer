@@ -18,11 +18,11 @@ export const Route = createFileRoute("/worker/profile")({
 });
 
 type WorkerProfileData = {
-  verification_status: string;
-  preferred_radius_km: number;
-  is_available: boolean;
-  current_location: { type: "Point"; coordinates: [number, number] } | null;
-  last_location_update: string | null;
+  verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "SUSPENDED";
+  preferredRadiusKm: number;
+  isAvailable: boolean;
+  currentLocation: { type: "Point"; coordinates: [number, number] } | null;
+  lastLocationUpdate: string | null;
 };
 
 function verificationTone(status: string): "success" | "warning" | "danger" | "primary" {
@@ -97,9 +97,9 @@ function WorkerProfile() {
   }, [router]);
 
   const locationAgeMinutes =
-    profile?.last_location_update === null || profile?.last_location_update === undefined
+    profile?.lastLocationUpdate === null || profile?.lastLocationUpdate === undefined
       ? null
-      : Math.max(0, Math.round((Date.now() - new Date(profile.last_location_update).getTime()) / 60_000));
+      : Math.max(0, Math.round((Date.now() - new Date(profile.lastLocationUpdate).getTime()) / 60_000));
 
   return (
     <div className="animate-rise px-3 py-3">
@@ -117,22 +117,22 @@ function WorkerProfile() {
               <div className="worker-compact-card flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold">{user?.phone ?? "Worker"}</h2>
-                  <Chip tone={verificationTone(profile.verification_status)}>
+                  <Chip tone={verificationTone(profile.verificationStatus)}>
                     <BadgeCheck className="h-3.5 w-3.5" />{" "}
-                    {verificationLabel(profile.verification_status)}
+                    {verificationLabel(profile.verificationStatus)}
                   </Chip>
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm">
                   <span className="inline-flex items-center gap-1 text-muted-foreground">
                     <ShieldCheck className="h-4 w-4 text-success" />{" "}
-                    {profile.is_available ? "Available for work" : "Currently unavailable"}
+                    {profile.isAvailable ? "Available for work" : "Currently unavailable"}
                   </span>
                   <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    <MapPin className="h-4 w-4 text-primary" /> {profile.preferred_radius_km} km search radius
+                    <MapPin className="h-4 w-4 text-primary" /> {profile.preferredRadiusKm} km search radius
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {profile.current_location
+                  {profile.currentLocation
                     ? locationAgeMinutes === null
                       ? "Location on record."
                       : `Location updated ${locationAgeMinutes} minute${locationAgeMinutes === 1 ? "" : "s"} ago.`
