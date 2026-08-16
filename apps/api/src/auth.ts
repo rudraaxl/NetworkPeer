@@ -47,7 +47,7 @@ export const ACCESS_TOKEN_TTL_SECONDS = parseDurationToSeconds(config.JWT_ACCESS
 export const REFRESH_TOKEN_TTL_SECONDS = parseDurationToSeconds(config.JWT_REFRESH_TTL);
 
 /** Minimal user identity embedded in tokens / returned to clients. */
-export type TokenUser = { id: string; role: UserRole; phone: string };
+export type TokenUser = { id: string; role: UserRole; phone: string; full_name: string };
 
 // ---------------------------------------------------------------------------
 // JWT primitives (HS256 only)
@@ -556,7 +556,7 @@ async function fetchUserForClaims(userId: string): Promise<TokenUser> {
   if (!user || !user.is_active || !user.is_verified) {
     throw new AuthError("USER_NOT_FOUND", "User referenced by token no longer exists", 401);
   }
-  return { id: user.id, role: user.role, phone: user.phone_number };
+  return { id: user.id, role: user.role, phone: user.phone_number, full_name: user.full_name };
 }
 
 async function incrementWithTtl(key: string, ttl: number, unit: "EX" | "PX"): Promise<number> {

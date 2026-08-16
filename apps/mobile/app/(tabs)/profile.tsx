@@ -21,6 +21,9 @@ export default function ProfileScreen() {
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
 
+  const displayName = worker?.fullName?.trim() || "Worker";
+  const avatarInitial = (worker?.fullName?.trim().charAt(0) ?? "W").toUpperCase();
+
   const loadWallet = useCallback(async () => {
     setWalletLoading(true);
     try {
@@ -53,8 +56,8 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.avatar}><Text style={styles.avatarText}>N</Text></View>
-          <Text style={styles.name}>Worker</Text>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{avatarInitial}</Text></View>
+          <Text style={styles.name}>{displayName}</Text>
           <Text style={styles.phone}>{worker?.phone ?? ""}</Text>
           <View style={styles.verifiedRow}>
             <Ionicons name="checkmark-circle" size={14} color="#A7F3D0" />

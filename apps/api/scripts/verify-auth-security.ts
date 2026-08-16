@@ -55,7 +55,7 @@ async function main(): Promise<void> {
 
     // eslint-disable-next-line no-console
     console.log("\n== Auth rotation security verification ==");
-    const first = await issueTokenPair({ id: userId, role: "CLIENT", phone: PHONE }, signAccessToken);
+    const first = await issueTokenPair({ id: userId, role: "CLIENT", phone: PHONE, full_name: "Verify client" }, signAccessToken);
     const firstClaims = refreshClaims(first.refresh_token);
     family = firstClaims.family;
     refreshJtis.add(firstClaims.jti);

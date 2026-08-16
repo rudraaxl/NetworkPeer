@@ -16,7 +16,7 @@ function isValidPhone(raw: string): boolean {
 }
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, setWorkerName } = useAuth();
   const router = useRouter();
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -24,6 +24,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const [otpLength, setOtpLength] = useState(6);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+  const [needsName, setNeedsName] = useState(false);
+  const [fullName, setFullName] = useState("");
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -40,7 +44,9 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
     try {
-      await api.requestOtp(normalized);
+      const result = await api.requestOtp(normalized);
+      setOtpLength(result.otpLength);
+      setDevOtp(result.otp ?? null);
       setOtpSent(true);
       setCooldown(60);
     } catch (e) {
@@ -63,19 +69,84 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
     try {
-      await login(normalized, otp.trim());
+      const outcome = await login(normalized, otp.trim());
       try {
         await api.grantConsent("LOCATION");
         await api.grantConsent("EVIDENCE");
       } catch {
         // Consent recording is best-effort after successful authentication.
       }
-      router.replace("/(tabs)");
+      if (outcome.isNewAccount) {
+        setNeedsName(true);
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invalid OTP");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function saveName() {
+    const name = fullName.trim();
+    if (name.length < 2) {
+      setError("Please enter your full name (at least 2 characters).");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await setWorkerName(name);
+      setNeedsName(false);
+      router.replace("/(tabs)");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your name. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (needsName) {
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
+        <View style={styles.card}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Welcome!</Text>
+            <Text style={styles.subtitle}>You're almost set. What should clients call you?</Text>
+          </View>
+
+          <Text style={styles.label}>Full name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Rohan Sharma"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="words"
+            autoCorrect={false}
+            value={fullName}
+            onChangeText={setFullName}
+            returnKeyType="done"
+            onSubmitEditing={() => void saveName()}
+          />
+
+          {error && <Text style={styles.error}>{error}</Text>}
+
+          <Pressable style={[styles.buttonPrimary, loading && styles.buttonDisabled]} disabled={loading} onPress={() => void saveName()}>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonTextPrimary}>Save and continue</Text>
+            )}
+          </Pressable>
+
+          <View style={styles.links}>
+            <Pressable disabled={loading} onPress={() => router.replace("/(tabs)")}>
+              <Text style={styles.link}>Skip for now</Text>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    );
   }
 
   return (
@@ -105,13 +176,18 @@ export default function LoginScreen() {
             <Text style={styles.label}>OTP code</Text>
             <TextInput
               style={styles.input}
-              placeholder="6-digit code"
+              placeholder={`${otpLength}-digit code`}
               placeholderTextColor={colors.textMuted}
               keyboardType="number-pad"
               value={otp}
               onChangeText={setOtp}
-              maxLength={6}
+              maxLength={otpLength}
             />
+            {devOtp && (
+              <View style={styles.devHint}>
+                <Text style={styles.devHintText}>Development code: {devOtp}</Text>
+              </View>
+            )}
           </>
         )}
 
@@ -155,6 +231,8 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonTextPrimary: { color: "#fff", fontSize: 16, fontWeight: "700" },
   error: { color: colors.danger, fontSize: 13, marginBottom: spacing.md },
+  devHint: { backgroundColor: colors.primarySoft, borderRadius: radii.md, padding: 10, marginTop: -8, marginBottom: spacing.md },
+  devHintText: { color: colors.primaryDark, fontSize: 12, fontWeight: "600" },
   links: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing.md },
   link: { color: colors.primary, fontSize: 13, fontWeight: "600" },
   linkDisabled: { color: colors.textMuted },

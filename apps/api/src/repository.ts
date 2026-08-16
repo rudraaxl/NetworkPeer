@@ -1458,6 +1458,16 @@ export async function createUser(input: {
   return user;
 }
 
+export async function updateUserFullName(userId: string, fullName: string): Promise<User> {
+  const { rows } = await pool.query<Row>(
+    `UPDATE users SET full_name = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+    [userId, fullName],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("User not found");
+  return mapUser(row);
+}
+
 export async function ensureWorkerProfile(userId: string): Promise<void> {
   await pool.query(
     `INSERT INTO worker_profiles (user_id, is_available)

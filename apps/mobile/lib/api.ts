@@ -47,6 +47,7 @@ export async function storeSession(tokens: AuthTokens) {
     id: tokens.user.id,
     role: "WORKER" as const,
     phone: tokens.user.phone_number,
+    fullName: tokens.user.full_name || undefined,
   } satisfies WorkerSession));
 }
 
@@ -93,7 +94,8 @@ type TokenPair = {
   access_token: string;
   refresh_token: string;
   expires_in: number;
-  user: { id: string; role: "CLIENT" | "WORKER" | "ADMIN"; phone: string };
+  user: { id: string; role: "CLIENT" | "WORKER" | "ADMIN"; phone: string; full_name: string };
+  is_new_account?: boolean;
 };
 
 function sessionFromPair(pair: TokenPair): AuthTokens {
@@ -105,7 +107,7 @@ function sessionFromPair(pair: TokenPair): AuthTokens {
       id: pair.user.id,
       phone_number: pair.user.phone,
       email: null,
-      full_name: "",
+      full_name: pair.user.full_name ?? "",
       role: pair.user.role,
       avatar_url: null,
       is_active: true,
@@ -116,6 +118,11 @@ function sessionFromPair(pair: TokenPair): AuthTokens {
     },
   };
 }
+
+export type VerifyOtpResult = {
+  session: AuthTokens;
+  isNewAccount: boolean;
+};
 
 async function performRequest<T>(
   path: string,
@@ -202,7 +209,12 @@ async function requestJson<T>(path: string, method: string, body?: unknown): Pro
 }
 
 export const api = {
-  async requestOtp(phoneNumber: string) {
+  async requestOtp(phoneNumber: string): Promise<{
+    expiresInSeconds: number;
+    otpLength: number;
+    otp?: string;
+    delivery: { transport: "sms" | "log"; to?: string };
+  }> {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -224,7 +236,7 @@ export const api = {
     return payload.data;
   },
 
-  async verifyOtp(phoneNumber: string, otp: string): Promise<AuthTokens> {
+  async verifyOtp(phoneNumber: string, otp: string): Promise<VerifyOtpResult> {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -240,7 +252,11 @@ export const api = {
     }
     const session = sessionFromPair(payload.data);
     await storeSession(session);
-    return session;
+    return { session, isNewAccount: Boolean(payload.data.is_new_account) };
+  },
+
+  async setProfileName(fullName: string): Promise<{ full_name: string }> {
+    return requestJson("/auth/profile", "POST", { full_name: fullName });
   },
 
   async logout() {
@@ -259,8 +275,8 @@ export const api = {
   },
 
   async me(): Promise<WorkerSession> {
-    const user = await fetchWithAuth<{ id: string; role: "WORKER"; phone: string }>("/auth/me");
-    return { id: user.id, role: "WORKER", phone: user.phone };
+    const user = await fetchWithAuth<{ id: string; role: "WORKER"; phone: string; full_name: string }>("/auth/me");
+    return { id: user.id, role: "WORKER", phone: user.phone, fullName: user.full_name || undefined };
   },
 
   async grantConsent(purpose: string): Promise<void> {
@@ -336,5 +352,16 @@ export const api = {
 
   async wallet(): Promise<{ balances: WalletBalance[] }> {
     return fetchWithAuth("/worker/wallet");
+  },
+
+  async workerSync(cursor = "0", limit = 100): Promise<{
+    jobs: WorkerJobDetail[];
+    snapshot_jobs: WorkerJobDetail[];
+    ledger_entries: unknown[];
+    removed_job_ids: string[];
+    has_more: boolean;
+    next_cursor: string;
+  }> {
+    return fetchWithAuth(`/worker/sync?cursor=${encodeURIComponent(cursor)}&limit=${limit}`);
   },
 };

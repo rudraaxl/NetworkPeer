@@ -95,6 +95,10 @@ function WorkerJob() {
 
   const assignmentVisible = job.is_assigned_to_requester;
 
+  const canWorkOn =
+    assignmentVisible &&
+    ["ASSIGNED", "EN_ROUTE", "AT_LOCATION", "IN_PROGRESS"].includes(job.status);
+
   return (
     <div>
       <div className="gradient-brand relative px-4 pb-16 pt-4 text-primary-foreground">
@@ -173,7 +177,7 @@ function WorkerJob() {
           </section>
         )}
 
-        {assignmentVisible && job.status !== "SUBMITTED" && job.status !== "COMPLETED" && (
+        {canWorkOn ? (
           <Link
             to="/worker/task/$jobId"
             params={{ jobId: job.id }}
@@ -181,7 +185,11 @@ function WorkerJob() {
           >
             <CheckCircle2 className="h-4 w-4" /> Continue live task
           </Link>
-        )}
+        ) : assignmentVisible ? (
+          <div className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/50 text-sm font-medium text-muted-foreground">
+            {job.status.replaceAll("_", " ")} — no further action needed
+          </div>
+        ) : null}
 
         <section className="rounded-2xl border border-border bg-card p-4 shadow-soft">
           <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">

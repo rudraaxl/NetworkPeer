@@ -347,7 +347,7 @@ async function main(): Promise<void> {
     assert(response.statusCode === 200 && body.success, "audit log accepts a bounded pagination cursor");
 
     const suspendedPair = await issueTokenPair(
-      { id: suspendedClient.id, role: "CLIENT", phone: suspendedClient.phone_number },
+      { id: suspendedClient.id, role: "CLIENT", phone: suspendedClient.phone_number, full_name: "Suspended client" },
       signAccessToken,
     );
     suspendedSocket = await connectSocket(address, suspendedClientToken);

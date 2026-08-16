@@ -34,6 +34,27 @@ function errorMessage(error: unknown): string {
   return "Unable to load wallet balances. Check your connection and try again.";
 }
 
+function TotalValue({ items }: { items: { currency: string; amount: number }[] }) {
+  if (items.length === 0) return <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">—</p>;
+  if (items.length === 1) {
+    const [item] = items;
+    return (
+      <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">
+        {formatCurrency(item.amount, item.currency)}
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-1">
+      {items.map((item) => (
+        <p key={item.currency} className="whitespace-nowrap text-xl font-semibold tracking-tight">
+          {formatCurrency(item.amount, item.currency)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function WorkerWallet() {
   const [balances, setBalances] = useState<WalletBalance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,16 +77,16 @@ function WorkerWallet() {
     void loadWallet();
   }, [loadWallet]);
 
-  const totals = useMemo(() => {
-    return balances.reduce(
-      (result, balance) => ({
-        available: result.available + asCents(balance.availableBalanceCents),
-        escrow: result.escrow + asCents(balance.pendingEscrowCents),
-        lifetime: result.lifetime + asCents(balance.lifetimeEarningsCents),
-      }),
-      { available: 0, escrow: 0, lifetime: 0 },
-    );
-  }, [balances]);
+  const perCurrency = useMemo(
+    () =>
+      balances.map((balance) => ({
+        currency: balance.currency,
+        available: asCents(balance.availableBalanceCents),
+        escrow: asCents(balance.pendingEscrowCents),
+        lifetime: asCents(balance.lifetimeEarningsCents),
+      })),
+    [balances],
+  );
 
   return (
     <div className="animate-rise space-y-4 px-3 py-3">
@@ -98,9 +119,12 @@ function WorkerWallet() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-medium text-muted-foreground">Available balance</p>
-              <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">
-                {formatCurrency(totals.available)}
-              </p>
+              <TotalValue
+                items={perCurrency.map((item) => ({
+                  currency: item.currency,
+                  amount: item.available,
+                }))}
+              />
               <p className="mt-1 text-sm leading-5 text-muted-foreground">Ready to withdraw</p>
             </div>
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
@@ -114,9 +138,12 @@ function WorkerWallet() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Pending earnings</p>
-                <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">
-                  {formatCurrency(totals.escrow)}
-                </p>
+                <TotalValue
+                  items={perCurrency.map((item) => ({
+                    currency: item.currency,
+                    amount: item.escrow,
+                  }))}
+                />
                 <p className="mt-1 text-sm leading-5 text-muted-foreground">Held in escrow</p>
               </div>
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-warning/20 text-warning">
@@ -129,9 +156,12 @@ function WorkerWallet() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Total earnings</p>
-                <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">
-                  {formatCurrency(totals.lifetime)}
-                </p>
+                <TotalValue
+                  items={perCurrency.map((item) => ({
+                    currency: item.currency,
+                    amount: item.lifetime,
+                  }))}
+                />
                 <p className="mt-1 text-sm leading-5 text-muted-foreground">Lifetime credits</p>
               </div>
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-success/20 text-success">
@@ -172,13 +202,13 @@ function WorkerWallet() {
                 <div>
                   <p className="text-xs text-muted-foreground">Available</p>
                   <p className="font-semibold">
-                    {formatCurrency(asCents(balance.availableBalanceCents))}
+                    {formatCurrency(asCents(balance.availableBalanceCents), balance.currency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Pending escrow</p>
                   <p className="font-semibold">
-                    {formatCurrency(asCents(balance.pendingEscrowCents))}
+                    {formatCurrency(asCents(balance.pendingEscrowCents), balance.currency)}
                   </p>
                 </div>
               </li>

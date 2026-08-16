@@ -9,6 +9,7 @@ import {
   MapPin,
   RefreshCw,
   Search,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -174,6 +175,9 @@ function WorkerHome() {
   const [maximumRadiusKm, setMaximumRadiusKm] = useState<number | null>(null);
   const [jobs, setJobs] = useState<WorkerJobSummary[]>([]);
   const [activeJobs, setActiveJobs] = useState<WorkerJobDetail[] | null>(null);
+  const [workerAvailable, setWorkerAvailable] = useState<boolean | null>(null);
+  const [nextPage, setNextPage] = useState<number | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [locationReadyVersion, setLocationReadyVersion] = useState(0);
@@ -229,6 +233,28 @@ function WorkerHome() {
     refreshLocation();
   }, [refreshLocation]);
 
+  const loadMore = useCallback(async () => {
+    if (nextPage === null || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const result = await api.nearbyWorkerJobs({
+        ...(debouncedRadiusKm === null ? {} : { radiusKm: debouncedRadiusKm }),
+        page: nextPage,
+        perPage: 20,
+      });
+      setJobs((current) => {
+        const seen = new Set(current.map((job) => job.id));
+        return [...current, ...result.items.filter((job) => !seen.has(job.id))];
+      });
+      setWorkerAvailable(result.is_available);
+      setNextPage(result.next_page);
+    } catch (requestError) {
+      toast.error(apiErrorMessage(requestError));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [nextPage, isLoadingMore, debouncedRadiusKm]);
+
   useEffect(() => {
     let active = true;
     void api
@@ -262,6 +288,8 @@ function WorkerHome() {
           setJobs(result.items);
           setMaximumRadiusKm(result.radius_km);
           setRadiusKm((currentRadius) => currentRadius ?? result.radius_km);
+          setWorkerAvailable(result.is_available);
+          setNextPage(result.next_page);
         }
       })
       .catch((requestError: unknown) => {
@@ -383,6 +411,18 @@ function WorkerHome() {
         </p>
       )}
 
+      {workerAvailable === false && !isLoading && (
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <ShieldAlert className="mt-0.5 h-5 w-5 flex-none text-amber-600" />
+          <div className="text-sm">
+            <p className="font-semibold text-amber-700">You're currently unavailable</p>
+            <p className="mt-0.5 text-amber-700/80">
+              You can only work one job at a time. Finish your active job to accept new work.
+            </p>
+          </div>
+        </div>
+      )}
+
       {view === "map" ? (
         <PrivacyMap jobCount={visibleJobs.length} />
       ) : (
@@ -393,12 +433,30 @@ function WorkerHome() {
             visibleJobs.map((job) => <WorkerJobCard key={job.id} job={job} />)
           ) : locationReadyVersion > 0 ? (
             <p className="rounded-2xl border border-border bg-card p-5 text-center text-sm text-muted-foreground">
-              No nearby jobs match this search.
+              {debouncedRadiusKm === null ? (
+                "No nearby jobs match this search."
+              ) : (
+                <>
+                  No posts within {debouncedRadiusKm} km yet — check back soon or widen your radius.
+                </>
+              )}
             </p>
           ) : (
             <p className="rounded-2xl border border-border bg-card p-5 text-center text-sm text-muted-foreground">
               Allow location access to find nearby work.
             </p>
+          )}
+
+          {nextPage !== null && visibleJobs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={isLoadingMore}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+            >
+              {isLoadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+              Load more jobs
+            </button>
           )}
         </div>
       )}

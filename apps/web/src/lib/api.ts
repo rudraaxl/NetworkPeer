@@ -488,6 +488,7 @@ export const api = {
     radius_km: number;
     has_more: boolean;
     next_page: number | null;
+    is_available: boolean;
   }> {
     const params = new URLSearchParams({
       page: String(input.page ?? 1),
@@ -546,6 +547,7 @@ export const api = {
     capturedAt: string;
     checksumSha256: string;
     idempotencyKey: string;
+    location?: { latitude: number; longitude: number };
   }): Promise<{ evidence: EvidenceSummary; upload: EvidenceUploadTarget | null }> {
     return request("/work/upload-url", {
       method: "POST",
@@ -558,6 +560,7 @@ export const api = {
         captured_at: input.capturedAt,
         checksum_sha256: input.checksumSha256,
         idempotency_key: input.idempotencyKey,
+        ...(input.location ? { location: input.location } : {}),
       }),
     });
   },

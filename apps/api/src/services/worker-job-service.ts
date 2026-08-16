@@ -64,6 +64,7 @@ export class WorkerJobService {
     radius_km: number;
     has_more: boolean;
     next_page: number | null;
+    is_available: boolean;
   }> {
     const profile = await this.requireVerifiedWorker(params.workerId);
     if (!Number.isSafeInteger(params.page) || params.page < 1 || params.page > MAX_PAGE) {
@@ -109,6 +110,7 @@ export class WorkerJobService {
       radius_km: radiusKm,
       has_more: hasMore,
       next_page: hasMore ? params.page + 1 : null,
+      is_available: profile.isAvailable,
     };
   }
 

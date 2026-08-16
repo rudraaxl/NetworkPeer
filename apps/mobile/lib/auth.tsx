@@ -5,14 +5,16 @@ import { api, clearSession, getStoredWorker, storeWorker } from "./api";
 type AuthState = {
   worker: WorkerSession | null;
   loading: boolean;
-  login: (phone: string, code: string) => Promise<WorkerSession>;
+  login: (phone: string, code: string) => Promise<{ worker: WorkerSession; isNewAccount: boolean }>;
+  setWorkerName: (fullName: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState>({
   worker: null,
   loading: true,
-  login: async () => null as unknown as WorkerSession,
+  login: async () => ({ worker: null as unknown as WorkerSession, isNewAccount: false }),
+  setWorkerName: async () => {},
   logout: async () => {},
 });
 
@@ -38,15 +40,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (phone: string, code: string) => {
-    const session = await api.verifyOtp(phone, code);
+    const result = await api.verifyOtp(phone, code);
     const workerSession: WorkerSession = {
-      id: session.user.id,
+      id: result.session.user.id,
       role: "WORKER",
-      phone: session.user.phone_number,
+      phone: result.session.user.phone_number,
+      fullName: result.session.user.full_name || undefined,
     };
     setWorker(workerSession);
     await storeWorker(workerSession);
-    return workerSession;
+    return { worker: workerSession, isNewAccount: result.isNewAccount };
+  }, []);
+
+  const setWorkerName = useCallback(async (fullName: string) => {
+    const name = fullName.trim();
+    if (!name) return;
+    await api.setProfileName(name);
+    setWorker((current) => {
+      if (!current) return current;
+      const next = { ...current, fullName: name };
+      void storeWorker(next);
+      return next;
+    });
   }, []);
 
   const logout = useCallback(async () => {
@@ -59,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ worker, loading, login, logout }}>
+    <AuthContext.Provider value={{ worker, loading, login, setWorkerName, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -20,6 +20,11 @@ const verifyOtpSchema = z.object({
   phone_number: phoneSchema,
   otp: z.string().regex(/^\d{4,8}$/, "OTP must be 4-8 digits"),
   role: z.enum(["CLIENT", "WORKER"]).optional(),
+  full_name: z.string().trim().min(1).max(80).optional(),
+}).strict();
+
+const profileUpdateSchema = z.object({
+  full_name: z.string().trim().min(1).max(80),
 }).strict();
 
 const refreshSchema = z.object({
@@ -50,6 +55,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         phone: body.value.phone_number,
         otp: body.value.otp,
         role: body.value.role,
+        fullName: body.value.full_name,
       });
       return ok(result);
     } catch (err) {
@@ -83,11 +89,25 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  app.post("/auth/profile", { onRequest: [requireAuth] }, async (request, reply) => {
+    const body = parseBody(profileUpdateSchema, request.body);
+    if (!body.ok) {
+      return reply.code(400).send(fail("VALIDATION_ERROR", body.message));
+    }
+    try {
+      return ok(await authService.updateProfile(request.auth.userId, body.value.full_name));
+    } catch (err) {
+      return handleAuthError(request, reply, err);
+    }
+  });
+
   app.get("/auth/me", { onRequest: [requireAuth] }, async (request) => {
+    const user = await authService.getProfile(request.auth.userId);
     return ok({
       id: request.auth.userId,
       role: request.auth.role,
       phone: request.auth.phone,
+      full_name: user?.full_name ?? "",
     });
   });
 }

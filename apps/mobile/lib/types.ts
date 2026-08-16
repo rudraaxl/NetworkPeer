@@ -24,6 +24,7 @@ export type WorkerSession = {
   id: string;
   role: "WORKER";
   phone: string;
+  fullName?: string;
 };
 
 export type AuthTokens = {

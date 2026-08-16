@@ -33,8 +33,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="completed"
         options={{
-          title: "Completed",
-          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "checkmark-done" : "checkmark-done-outline"} size={22} color={color} />,
+          title: "My jobs",
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "briefcase" : "briefcase-outline"} size={22} color={color} />,
         }}
       />
       <Tabs.Screen

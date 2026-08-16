@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Briefcase,
@@ -22,6 +22,7 @@ import {
   StatCard,
 } from "@/components/marketplace/primitives";
 import { api, type Job, type WalletBalance } from "@/lib/api";
+import { authSession } from "@/lib/auth-session";
 import { formatCurrency } from "@/lib/utils";
 
 export const Route = createFileRoute("/client/")({
@@ -61,6 +62,7 @@ function statusLabel(status: Job["status"]): string {
 }
 
 function ClientDashboard() {
+  const router = useRouter();
   const jobsQuery = useQuery({
     queryKey: ["client", "jobs"],
     queryFn: () => api.clientJobs({ page: 1, perPage: 100 }),
@@ -102,11 +104,13 @@ function ClientDashboard() {
     }
     try {
       await api.deleteAccount();
-      toast.success("Account data deletion requested.");
+      authSession.clear();
+      toast.success("Account data deletion requested. You are now signed out.");
+      await router.navigate({ to: "/" });
     } catch {
       toast.error("Could not delete account data. Please try again.");
     }
-  }, []);
+  }, [router]);
 
   return (
     <>

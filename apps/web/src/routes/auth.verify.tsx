@@ -87,7 +87,7 @@ function VerifyOtpPage() {
       const result = await api.requestOtp(pending.phoneNumber);
       setPending((current) => {
         if (!current) return current;
-        const next = { ...current, otpLength: result.otpLength };
+        const next = { ...current, otpLength: result.otpLength, developmentOtp: result.otp };
         window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(next));
         return next;
       });

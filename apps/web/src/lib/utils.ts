@@ -5,16 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(value: number | string) {
+export function formatCurrency(value: number | string, currency: string = "INR") {
   const amount = typeof value === "number" ? value : Number(value);
 
-  if (Number.isNaN(amount)) {
-    return "₹0";
+  try {
+    return new Intl.NumberFormat(`en-${currency === "INR" ? "IN" : "US"}`, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `$ ${amount}`;
   }
-
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
 }

@@ -17,6 +17,10 @@ export default function JobsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const firstName = worker?.fullName?.trim().split(/\s+/)[0] ?? "";
+  const displayName = firstName.length > 0 ? firstName : "there";
+  const avatarInitial = firstName.charAt(0).toUpperCase() || (worker?.phone.replace(/\D/g, "").slice(-2).charAt(0) ?? "N");
+
   const load = useCallback(async () => {
     try {
       const location = await getCurrentLocation();
@@ -51,13 +55,13 @@ export default function JobsScreen() {
             <View style={styles.topRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.kicker}>Worker dashboard</Text>
-                <Text style={styles.greeting}>Hi there</Text>
+                <Text style={styles.greeting}>Hi, {displayName}</Text>
                 <Text style={styles.subtitle}>
                   {error ? "We could not refresh jobs right now." : jobs.length > 0 ? `${jobs.length} nearby jobs available` : "No nearby work yet. Pull to refresh."}
                 </Text>
               </View>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>N</Text>
+                <Text style={styles.avatarText}>{avatarInitial}</Text>
               </View>
             </View>
           </View>

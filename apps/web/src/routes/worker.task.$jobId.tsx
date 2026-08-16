@@ -60,6 +60,21 @@ async function sha256Hex(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function captureLocation(): Promise<{ latitude: number; longitude: number } | null> {
+  if (!("geolocation" in navigator)) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 8_000, maximumAge: 120_000 },
+    );
+  });
+}
+
 function TaskExecution() {
   const { jobId } = Route.useParams();
   const [job, setJob] = useState<WorkerJobDetail | null>(null);
@@ -155,6 +170,7 @@ function TaskExecution() {
 
       setUploadingSubtaskId(subtaskId);
       try {
+        const location = await captureLocation();
         const reservation = await api.reserveEvidenceUpload({
           jobId,
           subtaskId,
@@ -164,6 +180,7 @@ function TaskExecution() {
           capturedAt: new Date().toISOString(),
           checksumSha256: await sha256Hex(file),
           idempotencyKey: crypto.randomUUID(),
+          ...(location ? { location } : {}),
         });
         if (reservation.upload) await api.uploadEvidenceToStorage(reservation.upload, file);
         const confirmed = await api.confirmEvidence(reservation.evidence.id);
