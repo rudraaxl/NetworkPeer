@@ -34,6 +34,14 @@ export default async function workerJobsRoutes(app: FastifyInstance): Promise<vo
       child.addHook("onRequest", requireAuth);
       child.addHook("onRequest", requireRole(["WORKER"]));
 
+      child.get("/worker/profile", async (request, reply) => {
+        try {
+          return ok(await workerJobService.profile(request.auth.userId));
+        } catch (err) {
+          return handleWorkerJobError(request, reply, err);
+        }
+      });
+
       child.get("/worker/jobs/nearby", async (request, reply) => {
         const parsed = nearbyQuerySchema.safeParse(request.query);
         if (!parsed.success) {

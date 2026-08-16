@@ -1,133 +1,170 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Camera,
-  LogOut,
-  ShieldCheck,
-  Star,
-  UserRoundCheck,
-} from "lucide-react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
+import { BadgeCheck, CircleAlert, Loader2, LogOut, MapPin, ShieldCheck } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/portal-shell";
 import { Chip, SectionCard } from "@/components/marketplace/primitives";
+import { api, ApiError } from "@/lib/api";
+import { authSession } from "@/lib/auth-session";
 
 export const Route = createFileRoute("/worker/profile")({
   head: () => ({
     meta: [
       { title: "Worker profile — NetworkPeers" },
-      { name: "description", content: "Edit your worker profile and trust profile." },
+      { name: "description", content: "Your worker profile and trust status." },
     ],
   }),
   component: WorkerProfile,
 });
 
-const skills = ["Inspection", "Photography", "Merchandising", "Audio capture"];
-const docs = ["Government ID", "Insurance", "Training certificate"];
+type WorkerProfileData = {
+  verification_status: string;
+  preferred_radius_km: number;
+  is_available: boolean;
+  current_location: { type: "Point"; coordinates: [number, number] } | null;
+  last_location_update: string | null;
+};
+
+function verificationTone(status: string): "success" | "warning" | "danger" | "primary" {
+  switch (status) {
+    case "VERIFIED":
+      return "success";
+    case "PENDING":
+      return "warning";
+    case "REJECTED":
+    case "SUSPENDED":
+      return "danger";
+    default:
+      return "primary";
+  }
+}
+
+function verificationLabel(status: string): string {
+  switch (status) {
+    case "VERIFIED":
+      return "Verified Worker";
+    case "PENDING":
+      return "Verification pending";
+    case "REJECTED":
+      return "Verification rejected";
+    case "SUSPENDED":
+      return "Suspended";
+    default:
+      return status.replaceAll("_", " ").toLowerCase();
+  }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return `${error.code}: ${error.message}`;
+  return "The profile could not be loaded. Check your connection and try again.";
+}
 
 function WorkerProfile() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<WorkerProfileData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const user = authSession.get()?.user;
+
+  const loadProfile = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      setProfile(await api.workerProfile());
+      setError(null);
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
+  const logout = useCallback(async () => {
+    setIsLoggingOut(true);
+    try {
+      await api.logout();
+    } catch {
+      // The session is cleared either way; the server revoke also runs.
+    } finally {
+      setIsLoggingOut(false);
+      await router.navigate({ to: "/" });
+    }
+  }, [router]);
+
+  const locationAgeMinutes =
+    profile?.last_location_update === null || profile?.last_location_update === undefined
+      ? null
+      : Math.max(0, Math.round((Date.now() - new Date(profile.last_location_update).getTime()) / 60_000));
+
   return (
     <div className="animate-rise px-3 py-3">
-      <PageHeader title="Profile" description="Your verified identity and quality signals." />
+      <PageHeader title="Profile" description="Your identity and trust status." />
 
       <div className="mt-3 flex flex-col gap-3">
         <div className="w-full">
           <SectionCard title="Worker profile" description="Trusted partner profile">
-            <div className="worker-compact-card flex flex-col gap-3 sm:flex-row sm:items-start">
-              <div className="grid h-20 w-20 place-items-center rounded-2xl border border-border bg-primary-soft text-primary">
-                <UserRoundCheck className="h-10 w-10" />
+            {isLoading ? (
+              <div className="animate-pulse space-y-3">
+                <div className="h-20 rounded-2xl bg-muted" />
+                <div className="h-24 rounded-2xl bg-muted" />
               </div>
-              <div className="min-w-0">
+            ) : profile ? (
+              <div className="worker-compact-card flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-semibold">A. Rivera</h2>
-                  <Chip tone="success">
-                    <BadgeCheck className="h-3.5 w-3.5" /> Verified Worker
+                  <h2 className="text-base font-semibold">{user?.phone ?? "Worker"}</h2>
+                  <Chip tone={verificationTone(profile.verification_status)}>
+                    <BadgeCheck className="h-3.5 w-3.5" />{" "}
+                    {verificationLabel(profile.verification_status)}
                   </Chip>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Field inspection specialist · Downtown SF
-                </p>
-                <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                <div className="flex flex-wrap gap-3 text-sm">
                   <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    <Star className="h-4 w-4 fill-warning text-warning" /> 4.9 / 5
+                    <ShieldCheck className="h-4 w-4 text-success" />{" "}
+                    {profile.is_available ? "Available for work" : "Currently unavailable"}
                   </span>
                   <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    <ShieldCheck className="h-4 w-4 text-success" /> 137 jobs
+                    <MapPin className="h-4 w-4 text-primary" /> {profile.preferred_radius_km} km search radius
                   </span>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  {profile.current_location
+                    ? locationAgeMinutes === null
+                      ? "Location on record."
+                      : `Location updated ${locationAgeMinutes} minute${locationAgeMinutes === 1 ? "" : "s"} ago.`
+                    : "No location on record yet. Refresh your location from the nearby jobs page."}
+                </p>
               </div>
-            </div>
+            ) : (
+              <p role="alert" className="flex gap-2 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+                <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {error ?? "Profile not found."}
+              </p>
+            )}
           </SectionCard>
         </div>
 
         <div className="w-full">
-          <div className="flex flex-col gap-3">
-            <SectionCard title="Skills & reliability" description="What clients see about you">
-              <div className="space-y-3">
-                <div className="flex flex-row gap-2 overflow-x-auto pb-2 snap-x">
-                  {skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="w-[80%] shrink-0 snap-center rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-                <div className="worker-compact-card rounded-2xl border border-border bg-muted/40 p-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Reliability score</span>
-                    <span className="font-semibold text-foreground">98%</span>
-                  </div>
-                  <div className="mt-3 h-2 rounded-full bg-border">
-                    <div className="h-2 w-[98%] rounded-full bg-gradient-to-r from-primary to-brand-teal" />
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Documents" description="Verification files">
-              <div className="flex flex-row gap-3 overflow-x-auto pb-2 snap-x">
-                {docs.map((doc) => (
-                  <div
-                    key={doc}
-                    className="w-[80%] shrink-0 snap-center rounded-2xl border border-border bg-card/80 px-3 py-3 text-sm"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span>{doc}</span>
-                      <span className="font-medium text-primary">Verified</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          </div>
-        </div>
-
-        <div className="w-full">
-          <SectionCard title="Settings" description="Profile controls">
+          <SectionCard title="Settings" description="Account controls">
             <div className="space-y-2">
-              <button className="press flex w-full items-center justify-between rounded-2xl border border-border bg-card px-3 py-3 text-sm font-medium">
-                <span className="flex items-center gap-2">
-                  <Camera className="h-4 w-4" /> Update photo
-                </span>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </button>
-              <button className="press flex w-full items-center justify-between rounded-2xl border border-border bg-card px-3 py-3 text-sm font-medium">
-                <span className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4" /> Privacy settings
-                </span>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </button>
-              <Link
-                to="/"
-                className="press flex w-full items-center justify-between rounded-2xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm font-medium text-destructive"
+              <button
+                type="button"
+                onClick={() => void logout()}
+                disabled={isLoggingOut}
+                className="press flex w-full items-center justify-between rounded-2xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm font-medium text-destructive disabled:opacity-60"
               >
                 <span className="flex items-center gap-2">
-                  <LogOut className="h-4 w-4" /> Logout
+                  {isLoggingOut ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LogOut className="h-4 w-4" />
+                  )}
+                  {isLoggingOut ? "Signing out" : "Logout"}
                 </span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </SectionCard>
         </div>

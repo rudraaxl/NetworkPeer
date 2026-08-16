@@ -73,7 +73,20 @@ function TaskExecution() {
   const loadJob = useCallback(async () => {
     setIsLoading(true);
     try {
-      setJob(await api.workerJob(jobId));
+      const [loadedJob, evidenceResult] = await Promise.all([
+        api.workerJob(jobId),
+        api.workerEvidence(jobId).catch(() => null),
+      ]);
+      setJob(loadedJob);
+      if (evidenceResult) {
+        const seeded: Record<string, EvidenceSummary> = {};
+        for (const item of evidenceResult.evidence) {
+          if (item.status === "UPLOADED" || item.status === "VERIFIED") {
+            seeded[item.subtask_id] = item;
+          }
+        }
+        setEvidenceBySubtask(seeded);
+      }
       setError(null);
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -87,11 +100,15 @@ function TaskExecution() {
   }, [loadJob]);
 
   const requiredSubtasks = useMemo(
-    () => job?.subtasks.filter((subtask) => subtask.is_required) ?? [],
+    () =>
+      job?.subtasks.filter((subtask) => subtask.is_required && subtask.status !== "SKIPPED") ?? [],
     [job],
   );
   const completedEvidenceCount = requiredSubtasks.filter(
-    (subtask) => evidenceBySubtask[subtask.id]?.status === "UPLOADED",
+    (subtask) =>
+      evidenceBySubtask[subtask.id]?.status === "UPLOADED" ||
+      evidenceBySubtask[subtask.id]?.status === "VERIFIED" ||
+      subtask.status === "COMPLETED",
   ).length;
   const readyToSubmit =
     job?.status === "IN_PROGRESS" && completedEvidenceCount === requiredSubtasks.length;
@@ -101,8 +118,8 @@ function TaskExecution() {
     if (!nextStatus) return;
     setIsAdvancing(true);
     try {
-      const updated = await api.advanceWorkStatus(jobId, nextStatus);
-      setJob((current) => (current ? { ...current, status: updated.status } : current));
+      await api.advanceWorkStatus(jobId, nextStatus);
+      setJob((current) => (current ? { ...current, status: nextStatus } : current));
       toast.success(`Work status updated to ${nextStatus.replaceAll("_", " ")}.`);
     } catch (requestError) {
       const message = errorMessage(requestError);
@@ -124,6 +141,13 @@ function TaskExecution() {
       const mediaType = mediaTypeFor(file);
       if (!mediaType || !file.type) {
         const message = "Choose a JPEG, PNG, WebP, MP4, MOV, WebM, MP3, WAV, or PDF evidence file.";
+        setError(message);
+        toast.error(message);
+        return;
+      }
+      if (file.type === "image/heic" || file.type === "image/heif") {
+        const message =
+          "HEIC photos from iPhone aren't accepted. Change your camera to JPEG in Settings > Camera > Formats > Most Compatible, or convert the photo to JPG/PNG before uploading.";
         setError(message);
         toast.error(message);
         return;
@@ -160,8 +184,8 @@ function TaskExecution() {
   const submitWork = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      const submitted = await api.submitWork(jobId);
-      setJob((current) => (current ? { ...current, status: submitted.status } : current));
+      await api.submitWork(jobId);
+      setJob((current) => (current ? { ...current, status: "SUBMITTED" } : current));
       setError(null);
       toast.success("Evidence submitted for client review and escrow release.");
     } catch (requestError) {
@@ -304,7 +328,11 @@ function TaskExecution() {
           <ul className="mt-4 space-y-3">
             {job.subtasks.map((subtask, index) => {
               const evidence = evidenceBySubtask[subtask.id];
-              const confirmed = evidence?.status === "UPLOADED";
+              const confirmed =
+                evidence?.status === "UPLOADED" ||
+                evidence?.status === "VERIFIED" ||
+                subtask.status === "COMPLETED";
+              const skipped = subtask.status === "SKIPPED";
               const uploading = uploadingSubtaskId === subtask.id;
               return (
                 <li
@@ -325,7 +353,9 @@ function TaskExecution() {
                     </div>
                     {confirmed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-success" /> : null}
                   </div>
-                  {subtask.is_required ? (
+                  {skipped ? (
+                    <Chip tone="warning">Skipped by client checklist</Chip>
+                  ) : subtask.is_required ? (
                     <label
                       className={cn(
                         "press mt-3 flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border text-sm font-semibold",

@@ -36,6 +36,7 @@ const uploadUrlSchema = z.object({
 }).strict();
 
 const mediaIdSchema = z.object({ media_id: z.string().uuid() }).strict();
+const jobParamsSchema = z.object({ jobId: z.string().uuid() }).strict();
 const submitSchema = z.object({ job_id: z.string().uuid() }).strict();
 const progressSchema = z.object({
   job_id: z.string().uuid(),
@@ -107,6 +108,18 @@ export default async function workRoutes(app: FastifyInstance, options: WorkRout
       if (!parsed.ok) return reply.code(400).send(fail("VALIDATION_ERROR", parsed.message));
       try {
         return ok(await evidenceService.advanceStatus(request.auth.userId, parsed.value.job_id, parsed.value.status));
+      } catch (err) {
+        return handleWorkError(request, reply, err);
+      }
+    });
+
+    child.get("/work/jobs/:jobId/evidence", async (request, reply) => {
+      const params = jobParamsSchema.safeParse(request.params);
+      if (!params.success) {
+        return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid job id"));
+      }
+      try {
+        return ok(await evidenceService.listEvidence(request.auth.userId, params.data.jobId));
       } catch (err) {
         return handleWorkError(request, reply, err);
       }

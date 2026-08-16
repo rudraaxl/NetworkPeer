@@ -6,6 +6,11 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "@types/react": "19.1.17",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "scripts": {
     "build:contracts": "npm run build --workspace @networkpeer/contracts",
     "typecheck:contracts": "npm run typecheck --workspace @networkpeer/contracts",

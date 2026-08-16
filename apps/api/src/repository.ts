@@ -547,6 +547,22 @@ export async function listMediaForClientJob(jobId: string, clientId: string): Pr
   return rows.map((r) => mapMedia(r as Row));
 }
 
+export async function listMediaForWorkerJob(jobId: string, workerId: string): Promise<JobSubtaskMedia[]> {
+  const { rows } = await pool.query<Row>(
+    `
+      SELECT m.*, ST_AsText(m.location) AS location
+      FROM job_subtask_media m
+      JOIN jobs j ON j.id = m.job_id
+      WHERE m.job_id = $1
+        AND j.worker_id = $2
+        AND m.worker_id = $2
+      ORDER BY m.captured_at ASC
+    `,
+    [jobId, workerId],
+  );
+  return rows.map((r) => mapMedia(r as Row));
+}
+
 export type ReserveMediaUploadInput = {
   mediaId: string;
   workerId: string;

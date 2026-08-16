@@ -505,6 +505,29 @@ export const api = {
   workerWallet(): Promise<{ balances: WalletBalance[] }> {
     return request("/worker/wallet");
   },
+  workerProfile(): Promise<{
+    verification_status: string;
+    preferred_radius_km: number;
+    is_available: boolean;
+    current_location: { type: "Point"; coordinates: [number, number] } | null;
+    last_location_update: string | null;
+  }> {
+    return request("/worker/profile");
+  },
+  workerJobs(): Promise<{
+    events: SyncEvent[];
+    jobs: WorkerJobDetail[];
+    snapshot_jobs: WorkerJobDetail[];
+    ledger_entries: unknown[];
+    removed_job_ids: string[];
+    has_more: boolean;
+    next_cursor: string;
+  }> {
+    return request("/worker/sync?cursor=0&limit=100");
+  },
+  workerEvidence(jobId: string): Promise<{ job_id: string; evidence: EvidenceSummary[] }> {
+    return request(`/work/jobs/${encodeURIComponent(jobId)}/evidence`);
+  },
   advanceWorkStatus(
     jobId: string,
     status: "EN_ROUTE" | "AT_LOCATION" | "IN_PROGRESS",

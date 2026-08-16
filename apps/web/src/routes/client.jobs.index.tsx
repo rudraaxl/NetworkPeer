@@ -247,7 +247,7 @@ function ClientJobs() {
                     >
                       View
                     </Link>
-                    {job.status === "POSTED" && (
+                    {job.status === "FUNDING" && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <button

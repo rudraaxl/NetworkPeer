@@ -5,6 +5,8 @@ import {
   confirmMediaUpload,
   getMediaForWorker,
   getWorkerJobProfile,
+  getWorkerVisibleJob,
+  listMediaForWorkerJob,
   MediaReservationConflictError,
   reserveMediaUpload,
   submitJobWithEvidence,
@@ -312,6 +314,19 @@ export class WorkEvidenceService {
       }
       throw err;
     }
+  }
+
+  async listEvidence(workerId: string, jobId: string): Promise<{
+    job_id: string;
+    evidence: EvidenceSummary[];
+  }> {
+    await this.requireVerifiedWorker(workerId);
+    const job = await getWorkerVisibleJob(jobId, workerId);
+    if (!job || !job.is_assigned_to_requester) {
+      throw new WorkEvidenceServiceError("JOB_NOT_FOUND", "Job not found", 404);
+    }
+    const media = await listMediaForWorkerJob(jobId, workerId);
+    return { job_id: jobId, evidence: media.map(toEvidenceSummary) };
   }
 
   async submit(workerId: string, jobId: string): Promise<{ job_id: string; status: "SUBMITTED" }> {

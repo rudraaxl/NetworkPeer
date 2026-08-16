@@ -146,13 +146,28 @@ export class WorkerJobService {
     }
   }
 
+  async profile(workerId: string): Promise<WorkerJobProfile> {
+    const profile = await getWorkerJobProfile(workerId);
+    if (!profile) {
+      throw new WorkerJobServiceError("WORKER_PROFILE_NOT_FOUND", "Worker profile not found", 404);
+    }
+    return profile;
+  }
+
   async accept(workerId: string, jobId: string): Promise<WorkerJobDetail> {
     await this.requireVerifiedWorker(workerId);
     try {
       await acceptJobForWorker(jobId, workerId);
     } catch (err) {
       const code = databaseErrorCode(err);
-      if (code === "22000" || code === "55000" || code === "23514" || code === "23505") {
+      if (code === "22000") {
+        throw new WorkerJobServiceError(
+          "LOCATION_NOT_FRESH",
+          "Your location is stale or outside this job's radius. Refresh your location, then try again.",
+          409,
+        );
+      }
+      if (code === "55000" || code === "23514" || code === "23505") {
         throw new WorkerJobServiceError("JOB_NOT_AVAILABLE", "Job is no longer available", 409);
       }
       throw err;
