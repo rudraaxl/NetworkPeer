@@ -32,7 +32,7 @@ function WorkerLayout() {
           <ThemeToggle />
         </div>
 
-        <div className="relative flex min-h-screen w-full flex-col overflow-hidden rounded-[2rem] border border-border bg-background shadow-lift">
+        <div className="relative flex h-dvh min-h-screen w-full flex-col overflow-hidden rounded-[2rem] border border-border bg-background shadow-lift">
           <div className="glass sticky top-0 z-30 flex items-center justify-between border-b border-border/70 px-4 py-3 text-sm font-medium">
             <span className="font-semibold">Worker Portal</span>
             <span className="flex items-center gap-2 text-muted-foreground">

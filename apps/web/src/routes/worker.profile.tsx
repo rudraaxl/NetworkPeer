@@ -116,12 +116,17 @@ function WorkerProfile() {
             ) : profile ? (
               <div className="worker-compact-card flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-semibold">{user?.phone ?? "Worker"}</h2>
+                  <h2 className="text-base font-semibold">
+                    {user?.full_name?.trim() ? user.full_name : (user?.phone ?? "Worker")}
+                  </h2>
                   <Chip tone={verificationTone(profile.verificationStatus)}>
                     <BadgeCheck className="h-3.5 w-3.5" />{" "}
                     {verificationLabel(profile.verificationStatus)}
                   </Chip>
                 </div>
+                {user?.full_name?.trim() ? (
+                  <p className="-mt-1 text-xs text-muted-foreground">{user.phone}</p>
+                ) : null}
                 <div className="flex flex-wrap gap-3 text-sm">
                   <span className="inline-flex items-center gap-1 text-muted-foreground">
                     <ShieldCheck className="h-4 w-4 text-success" />{" "}

@@ -414,7 +414,7 @@ function TaskExecution() {
         )}
       </section>
 
-      <div className="glass sticky bottom-20 z-20 mt-4 rounded-2xl p-2">
+      <div className="glass sticky bottom-3 z-20 mt-4 rounded-2xl p-2">
         <button
           type="button"
           disabled={!readyToSubmit || isSubmitting}
