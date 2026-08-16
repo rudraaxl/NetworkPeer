@@ -22,7 +22,8 @@ type TokenPair = {
   access_token: string;
   refresh_token: string;
   expires_in: number;
-  user: { id: string; role: AppRole; phone: string };
+  user: { id: string; role: AppRole; phone: string; full_name: string };
+  is_new_account?: boolean;
 };
 
 export const JOB_STATUSES = jobStatusSchema.options as readonly JobStatus[];
@@ -353,14 +354,21 @@ export const api = {
     phoneNumber: string,
     otp: string,
     role: Exclude<AppRole, "ADMIN">,
-  ): Promise<AuthSession> {
+  ): Promise<AuthSession & { isNewAccount: boolean }> {
     const pair = await request<TokenPair>("/auth/otp/verify", {
       method: "POST",
       body: JSON.stringify({ phone_number: phoneNumber, otp, role }),
     });
     const session = sessionFromTokenPair(pair);
     authSession.set(session);
-    return session;
+    return { ...session, isNewAccount: Boolean(pair.is_new_account) };
+  },
+
+  updateProfileName(fullName: string): Promise<{ full_name: string }> {
+    return request("/auth/profile", {
+      method: "POST",
+      body: JSON.stringify({ full_name: fullName }),
+    });
   },
   async logout(): Promise<void> {
     const current = authSession.get();

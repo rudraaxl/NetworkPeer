@@ -10,6 +10,7 @@ export type AuthSession = {
     id: string;
     role: AppRole;
     phone: string;
+    full_name: string;
   };
 };
 
