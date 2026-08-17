@@ -442,7 +442,13 @@ function TaskExecution() {
                   key={subtask.id}
                   className={cn(
                     "rounded-xl border p-3",
-                    confirmed ? "border-success/50 bg-success/10" : "border-border bg-muted/40",
+                    confirmed
+                      ? "border-success/50 bg-success/10"
+                      : skipped
+                        ? "border-warning/20 bg-warning/10"
+                        : subtask.is_required && !confirmed
+                          ? "border-primary/20 bg-card"
+                          : "border-border bg-muted/40",
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -465,14 +471,7 @@ function TaskExecution() {
                         Saved offline — uploading automatically
                       </div>
                     ) : (
-                      <label
-                        className={cn(
-                          "press mt-3 flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border text-sm font-semibold",
-                          job.status === "IN_PROGRESS"
-                            ? "border-primary/40 bg-card text-primary"
-                            : "cursor-not-allowed border-border text-muted-foreground",
-                        )}
-                      >
+                      <label className="press flex h-10 items-center justify-center gap-2 rounded-xl border border-primary/40 bg-card text-primary cursor-pointer">
                         {uploading ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (

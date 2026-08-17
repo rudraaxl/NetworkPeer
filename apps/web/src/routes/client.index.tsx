@@ -72,11 +72,17 @@ function ClientDashboard() {
     queryFn: api.clientWallet,
   });
 
-  const jobs = jobsQuery.data?.items ?? [];
-  const activeJobs = jobs.filter((job) => activeStatuses.has(job.status));
-  const completedJobs = jobs.filter((job) => completedStatuses.has(job.status));
-  const pendingReviews = jobs.filter((job) => reviewStatuses.has(job.status));
-  const balances = walletQuery.data?.balances ?? [];
+  const jobs = useMemo(() => jobsQuery.data?.items ?? [], [jobsQuery]);
+  const activeJobs = useMemo(() => jobs.filter((job) => activeStatuses.has(job.status)), [jobs]);
+  const completedJobs = useMemo(
+    () => jobs.filter((job) => completedStatuses.has(job.status)),
+    [jobs],
+  );
+  const pendingReviews = useMemo(
+    () => jobs.filter((job) => reviewStatuses.has(job.status)),
+    [jobs],
+  );
+  const balances = useMemo(() => walletQuery.data?.balances ?? [], [walletQuery]);
 
   const balanceTotal = useMemo(
     () =>
@@ -132,50 +138,40 @@ function ClientDashboard() {
         }
       />
 
-      <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible xl:grid-cols-5">
-        <div className="min-w-[260px] max-w-[280px] flex-none snap-start sm:min-w-0 sm:max-w-none">
-          <StatCard
-            label="Jobs posted"
-            value={String(jobs.length)}
-            icon={Briefcase}
-            hint="all time"
-          />
-        </div>
-        <div className="min-w-[260px] max-w-[280px] flex-none snap-start sm:min-w-0 sm:max-w-none">
-          <StatCard
-            label="Jobs active"
-            value={String(activeJobs.length)}
-            icon={Clock3}
-            tone="warning"
-            hint="in progress"
-          />
-        </div>
-        <div className="min-w-[260px] max-w-[280px] flex-none snap-start sm:min-w-0 sm:max-w-none">
-          <StatCard
-            label="Jobs completed"
-            value={String(completedJobs.length)}
-            icon={CheckCircle2}
-            tone="success"
-            hint="all time"
-          />
-        </div>
-        <div className="min-w-[260px] max-w-[280px] flex-none snap-start sm:min-w-0 sm:max-w-none">
-          <StatCard
-            label="Pending reviews"
-            value={String(pendingReviews.length)}
-            icon={Star}
-            tone="teal"
-            hint="evidence awaiting you"
-          />
-        </div>
-        <div className="min-w-[260px] max-w-[280px] flex-none snap-start sm:min-w-0 sm:max-w-none">
-          <StatCard
-            label="Wallet balance"
-            value={formatCurrency(balanceTotal)}
-            icon={Wallet}
-            hint="incl. escrow"
-          />
-        </div>
+      <div className="grid gap-4 pb-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        <StatCard
+          label="Jobs posted"
+          value={String(jobs.length)}
+          icon={Briefcase}
+          hint="all time"
+        />
+        <StatCard
+          label="Jobs active"
+          value={String(activeJobs.length)}
+          icon={Clock3}
+          tone="warning"
+          hint="in progress"
+        />
+        <StatCard
+          label="Jobs completed"
+          value={String(completedJobs.length)}
+          icon={CheckCircle2}
+          tone="success"
+          hint="all time"
+        />
+        <StatCard
+          label="Pending reviews"
+          value={String(pendingReviews.length)}
+          icon={Star}
+          tone="teal"
+          hint="evidence awaiting you"
+        />
+        <StatCard
+          label="Wallet balance"
+          value={formatCurrency(balanceTotal)}
+          icon={Wallet}
+          hint="incl. escrow"
+        />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

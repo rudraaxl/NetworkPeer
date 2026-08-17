@@ -105,7 +105,7 @@ function WorkerProfile() {
         );
 
   return (
-    <div className="animate-rise px-3 py-3">
+    <div className="px-3 py-3">
       <PageHeader title="Profile" description="Your identity and trust status." />
 
       <div className="mt-3 flex flex-col gap-3">

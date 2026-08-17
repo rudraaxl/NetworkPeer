@@ -145,7 +145,7 @@ function VerifyOtpPage() {
         heading="What should we call you?"
         sub="Your name helps clients and workers recognize you on the platform."
       >
-        <div className="w-full rounded-3xl border border-border bg-card/80 p-6 shadow-lift">
+        <div className="w-full rounded-2xl border border-border bg-muted/70 p-6 shadow-lift">
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/70 p-3">
             <div className="grid h-10 w-10 place-items-center rounded-2xl bg-primary-soft text-primary">
               <Sparkles className="h-5 w-5" />

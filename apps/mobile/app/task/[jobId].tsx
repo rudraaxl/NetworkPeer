@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 10,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.successBorder,
   },
   captureRowDone: { backgroundColor: colors.successSoft, borderColor: colors.successBorder },
   captureRowQueued: { backgroundColor: colors.warningSoft, borderColor: colors.warningBorder },
