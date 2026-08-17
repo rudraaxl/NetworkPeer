@@ -267,9 +267,7 @@ function VerifyOtpPage() {
         {pending?.developmentOtp ? (
           <p className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
             Development OTP:{" "}
-            <span className="font-semibold tracking-widest">
-              {pending.developmentOtp.replace(/./g, "*")}
-            </span>
+            <span className="font-semibold tracking-widest">{pending.developmentOtp}</span>
           </p>
         ) : null}
         <button
