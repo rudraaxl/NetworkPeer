@@ -79,7 +79,8 @@ function ClientDashboard() {
   const balances = walletQuery.data?.balances ?? [];
 
   const balanceTotal = useMemo(
-    () => walletTotal(balances, "availableBalanceCents") + walletTotal(balances, "pendingEscrowCents"),
+    () =>
+      walletTotal(balances, "availableBalanceCents") + walletTotal(balances, "pendingEscrowCents"),
     [balances],
   );
 
@@ -99,7 +100,11 @@ function ClientDashboard() {
   }, []);
 
   const requestDeletion = useCallback(async () => {
-    if (!window.confirm("Delete your account data? This deactivates your account and removes consent records.")) {
+    if (
+      !window.confirm(
+        "Delete your account data? This deactivates your account and removes consent records.",
+      )
+    ) {
       return;
     }
     try {
@@ -115,7 +120,7 @@ function ClientDashboard() {
   return (
     <>
       <PageHeader
-        title="Good afternoon"
+        title="Client dashboard"
         description="Here's what's happening across your jobs today."
         action={
           <Link

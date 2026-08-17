@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { colors } from "@/lib/theme";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from "expo-audio";
 import * as Application from "expo-application";
@@ -335,7 +336,7 @@ export default function CaptureModal({ visible, jobId, subtaskId, mediaType, onD
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0F172A" },
+  container: { flex: 1, backgroundColor: colors.background },
   audioScreen: { flex: 1, alignItems: "center", justifyContent: "center" },
   audioTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
   audioHint: { color: "#CBD5E1", fontSize: 14, marginTop: 8, textAlign: "center", paddingHorizontal: 32 },

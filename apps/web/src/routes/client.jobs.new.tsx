@@ -102,11 +102,16 @@ function CreateJob() {
       ...previous,
       { id: Date.now(), title: "", instructions: "", isRequired: true },
     ]);
-    setCountInput((previous) => String(Math.min(MAX_CHECKLIST_ITEMS, (Number.parseInt(previous, 10) || 0) + 1)));
+    setCountInput((previous) =>
+      String(Math.min(MAX_CHECKLIST_ITEMS, (Number.parseInt(previous, 10) || 0) + 1)),
+    );
   }, []);
 
   const resizeItems = useCallback((count: number) => {
-    const clamped = Math.max(0, Math.min(MAX_CHECKLIST_ITEMS, Math.floor(Number.isFinite(count) ? count : 0)));
+    const clamped = Math.max(
+      0,
+      Math.min(MAX_CHECKLIST_ITEMS, Math.floor(Number.isFinite(count) ? count : 0)),
+    );
     setItems((previous) => {
       if (clamped === previous.length) return previous;
       if (clamped < previous.length) return previous.slice(0, clamped);
@@ -376,7 +381,9 @@ function CreateJob() {
                       type="button"
                       aria-label="Fewer checklist items"
                       onClick={() =>
-                        handleCountChange(String(Math.max(0, (Number.parseInt(countInput, 10) || 0) - 1)))
+                        handleCountChange(
+                          String(Math.max(0, (Number.parseInt(countInput, 10) || 0) - 1)),
+                        )
                       }
                       className="press grid h-9 w-9 place-items-center rounded-lg border border-border bg-card text-lg font-semibold hover:border-primary/40"
                     >
@@ -395,7 +402,14 @@ function CreateJob() {
                       type="button"
                       aria-label="More checklist items"
                       onClick={() =>
-                        handleCountChange(String(Math.min(MAX_CHECKLIST_ITEMS, (Number.parseInt(countInput, 10) || 0) + 1)))
+                        handleCountChange(
+                          String(
+                            Math.min(
+                              MAX_CHECKLIST_ITEMS,
+                              (Number.parseInt(countInput, 10) || 0) + 1,
+                            ),
+                          ),
+                        )
                       }
                       className="press grid h-9 w-9 place-items-center rounded-lg border border-border bg-card text-lg font-semibold hover:border-primary/40"
                     >

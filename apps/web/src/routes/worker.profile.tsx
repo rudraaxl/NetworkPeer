@@ -99,7 +99,10 @@ function WorkerProfile() {
   const locationAgeMinutes =
     profile?.lastLocationUpdate === null || profile?.lastLocationUpdate === undefined
       ? null
-      : Math.max(0, Math.round((Date.now() - new Date(profile.lastLocationUpdate).getTime()) / 60_000));
+      : Math.max(
+          0,
+          Math.round((Date.now() - new Date(profile.lastLocationUpdate).getTime()) / 60_000),
+        );
 
   return (
     <div className="animate-rise px-3 py-3">
@@ -133,7 +136,8 @@ function WorkerProfile() {
                     {profile.isAvailable ? "Available for work" : "Currently unavailable"}
                   </span>
                   <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    <MapPin className="h-4 w-4 text-primary" /> {profile.preferredRadiusKm} km search radius
+                    <MapPin className="h-4 w-4 text-primary" /> {profile.preferredRadiusKm} km
+                    search radius
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -145,7 +149,10 @@ function WorkerProfile() {
                 </p>
               </div>
             ) : (
-              <p role="alert" className="flex gap-2 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+              <p
+                role="alert"
+                className="flex gap-2 rounded-xl bg-destructive/10 p-3 text-sm text-destructive"
+              >
                 <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {error ?? "Profile not found."}
               </p>
             )}

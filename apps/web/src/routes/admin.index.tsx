@@ -68,30 +68,61 @@ function AdminDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Active jobs" value={String(activeJobs)} icon={Briefcase} tone="primary" hint="live across the platform" />
-        <StatCard label="Escrow held" value={formatCurrency(escrowVolume)} icon={CircleDollarSign} tone="warning" hint="completed holds" />
-        <StatCard label="Platform revenue" value={formatCurrency(platformRevenue)} icon={Building2} tone="success" hint="completed postings" />
-        <StatCard label="Active users" value={`${activeUsers}/${totalUsers}`} icon={Users} tone="teal" hint="active accounts" />
+        <StatCard
+          label="Active jobs"
+          value={String(activeJobs)}
+          icon={Briefcase}
+          tone="primary"
+          hint="live across the platform"
+        />
+        <StatCard
+          label="Escrow held"
+          value={formatCurrency(escrowVolume)}
+          icon={CircleDollarSign}
+          tone="warning"
+          hint="completed holds"
+        />
+        <StatCard
+          label="Platform revenue"
+          value={formatCurrency(platformRevenue)}
+          icon={Building2}
+          tone="success"
+          hint="completed postings"
+        />
+        <StatCard
+          label="Active users"
+          value={`${activeUsers}/${totalUsers}`}
+          icon={Users}
+          tone="teal"
+          hint="active accounts"
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <SectionCard title="Financial basis" description="Ledger-derived, currency-safe aggregates">
           <div className="space-y-3 text-base">
             {(analytics.data?.escrow_hold_volume ?? []).map((entry) => (
-              <div key={entry.currency} className="flex items-center justify-between rounded-xl border border-border px-3 py-3">
+              <div
+                key={entry.currency}
+                className="flex items-center justify-between rounded-xl border border-border px-3 py-3"
+              >
                 <span className="text-muted-foreground">Escrow held ({entry.currency})</span>
                 <span className="font-semibold">{formatCurrency(cents(entry.cents))}</span>
               </div>
             ))}
             {(analytics.data?.platform_fee_revenue ?? []).map((entry) => (
-              <div key={`fee-${entry.currency}`} className="flex items-center justify-between rounded-xl border border-border px-3 py-3">
+              <div
+                key={`fee-${entry.currency}`}
+                className="flex items-center justify-between rounded-xl border border-border px-3 py-3"
+              >
                 <span className="text-muted-foreground">Platform revenue ({entry.currency})</span>
                 <span className="font-semibold">{formatCurrency(cents(entry.cents))}</span>
               </div>
             ))}
-            {(!analytics.data?.escrow_hold_volume?.length && !analytics.data?.platform_fee_revenue?.length) && (
-              <p className="text-muted-foreground">No completed ledger postings yet.</p>
-            )}
+            {!analytics.data?.escrow_hold_volume?.length &&
+              !analytics.data?.platform_fee_revenue?.length && (
+                <p className="text-muted-foreground">No completed ledger postings yet.</p>
+              )}
           </div>
         </SectionCard>
 

@@ -17,7 +17,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/portal-shell";
-import { AnonymousBadge, Chip, SectionCard, SuccessCheck } from "@/components/marketplace/primitives";
+import {
+  AnonymousBadge,
+  Chip,
+  SectionCard,
+  SuccessCheck,
+} from "@/components/marketplace/primitives";
 import { api, ApiError, type EvidenceSummary, type Job } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 
@@ -28,7 +33,13 @@ export const Route = createFileRoute("/client/review/$jobId")({
 const mediaIcon = { IMAGE: Camera, VIDEO: Camera, AUDIO: Volume2, DOCUMENT: Camera } as const;
 
 function mediaLabel(type: EvidenceSummary["media_type"]): string {
-  return type === "IMAGE" ? "Photo" : type === "VIDEO" ? "Video" : type === "AUDIO" ? "Audio" : "Document";
+  return type === "IMAGE"
+    ? "Photo"
+    : type === "VIDEO"
+      ? "Video"
+      : type === "AUDIO"
+        ? "Audio"
+        : "Document";
 }
 
 function errorMessage(error: unknown): string {
@@ -77,14 +88,17 @@ function ReviewPage() {
     }
   }, [jobId, loadEvidence]);
 
-  const downloadEvidence = useCallback(async (mediaId: string) => {
-    try {
-      const { url } = await api.clientEvidenceDownloadUrl(jobId, mediaId);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    }
-  }, [jobId]);
+  const downloadEvidence = useCallback(
+    async (mediaId: string) => {
+      try {
+        const { url } = await api.clientEvidenceDownloadUrl(jobId, mediaId);
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (requestError) {
+        setError(errorMessage(requestError));
+      }
+    },
+    [jobId],
+  );
 
   const openDispute = useCallback(async () => {
     setIsDisputing(true);
@@ -113,7 +127,10 @@ function ReviewPage() {
   if (!job) {
     return (
       <div className="space-y-4 p-6">
-        <Link to="/client/jobs" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+        <Link
+          to="/client/jobs"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+        >
           <ArrowLeft className="h-4 w-4" /> Back to jobs
         </Link>
         <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">
@@ -133,7 +150,10 @@ function ReviewPage() {
         <p className="mt-2 text-lg text-muted-foreground">
           {formatCurrency(job.budget_cents / 100)} released from escrow to the Verified Worker.
         </p>
-        <Link to="/client/jobs" className="press gradient-brand mt-6 inline-flex rounded-xl px-4 py-2.5 text-base font-semibold text-primary-foreground">
+        <Link
+          to="/client/jobs"
+          className="press gradient-brand mt-6 inline-flex rounded-xl px-4 py-2.5 text-base font-semibold text-primary-foreground"
+        >
           Back to jobs
         </Link>
       </div>
@@ -146,7 +166,11 @@ function ReviewPage() {
         title="Review evidence"
         description={`${job.id} · ${uploaded.length} items captured in-app`}
         action={
-          <Link to="/client/jobs/$jobId" params={{ jobId }} className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-base font-medium">
+          <Link
+            to="/client/jobs/$jobId"
+            params={{ jobId }}
+            className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-base font-medium"
+          >
             <ArrowLeft className="h-4 w-4" /> Job details
           </Link>
         }
@@ -181,7 +205,9 @@ function ReviewPage() {
 
           <SectionCard title="Evidence gallery" description="Uploaded and version-pinned media">
             {evidence.length === 0 ? (
-              <p className="text-base text-muted-foreground">No evidence has been uploaded for this job yet.</p>
+              <p className="text-base text-muted-foreground">
+                No evidence has been uploaded for this job yet.
+              </p>
             ) : (
               <ul className="space-y-3">
                 {evidence.map((item) => {
@@ -193,16 +219,27 @@ function ReviewPage() {
                           <Icon className="h-5 w-5" />
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-base font-semibold">{mediaLabel(item.media_type)} evidence</p>
+                          <p className="truncate text-base font-semibold">
+                            {mediaLabel(item.media_type)} evidence
+                          </p>
                           <p className="mt-0.5 text-sm text-muted-foreground">
-                            {item.mime_type ?? "Unknown type"} · {item.file_size_bytes ? `${Math.round(item.file_size_bytes / 1024)} KB` : "Unknown size"}
+                            {item.mime_type ?? "Unknown type"} ·{" "}
+                            {item.file_size_bytes
+                              ? `${Math.round(item.file_size_bytes / 1024)} KB`
+                              : "Unknown size"}
                           </p>
                           <p className="mt-0.5 text-sm text-muted-foreground">
                             Captured {new Date(item.captured_at).toLocaleString()}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Chip tone={item.status === "UPLOADED" || item.status === "VERIFIED" ? "success" : "neutral"}>
+                          <Chip
+                            tone={
+                              item.status === "UPLOADED" || item.status === "VERIFIED"
+                                ? "success"
+                                : "neutral"
+                            }
+                          >
                             {item.status.replaceAll("_", " ")}
                           </Chip>
                           {(item.status === "UPLOADED" || item.status === "VERIFIED") && (
@@ -244,7 +281,8 @@ function ReviewPage() {
 
           <SectionCard title="Approval">
             <p className="text-base text-muted-foreground">
-              Approving releases escrow to the worker and records the settlement in the immutable ledger.
+              Approving releases escrow to the worker and records the settlement in the immutable
+              ledger.
             </p>
             <button
               type="button"
@@ -257,7 +295,11 @@ function ReviewPage() {
                   : "cursor-not-allowed bg-muted text-muted-foreground",
               )}
             >
-              {isApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {isApproving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
               {isApproving ? "Approving..." : "Approve & release payout"}
             </button>
             <button
@@ -266,7 +308,11 @@ function ReviewPage() {
               disabled={isDisputing || job.status !== "SUBMITTED"}
               className="press mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 text-base font-semibold text-destructive disabled:opacity-60"
             >
-              {isDisputing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ThumbsDown className="h-4 w-4" />}
+              {isDisputing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ThumbsDown className="h-4 w-4" />
+              )}
               {isDisputing ? "Opening dispute..." : "Dispute submission"}
             </button>
           </SectionCard>

@@ -44,26 +44,28 @@ export function LocationPicker({
   const [status, setStatus] = useState<string | null>(null);
 
   // Keep the marker in sync with the parent's coordinates (e.g. initial value).
-  const syncMarker = useCallback(
-    (L: LeafletModule, map: Map, nextLat: number, nextLng: number) => {
-      const next: [number, number] = [nextLat, nextLng];
-      if (markerRef.current) {
-        markerRef.current.setLatLng(next);
-      } else {
-        markerRef.current = L.marker(next, {
-          icon: L.divIcon({ html: pinHtml(true), className: "", iconSize: [22, 22], iconAnchor: [11, 22] }),
-          draggable: true,
-        })
-          .addTo(map)
-          .on("dragend", () => {
-            const position = markerRef.current?.getLatLng();
-            if (position) onPickRef.current(position.lat, position.lng);
-          });
-      }
-      map.flyTo(next, Math.max(map.getZoom(), 14), { duration: 0.6 });
-    },
-    [],
-  );
+  const syncMarker = useCallback((L: LeafletModule, map: Map, nextLat: number, nextLng: number) => {
+    const next: [number, number] = [nextLat, nextLng];
+    if (markerRef.current) {
+      markerRef.current.setLatLng(next);
+    } else {
+      markerRef.current = L.marker(next, {
+        icon: L.divIcon({
+          html: pinHtml(true),
+          className: "",
+          iconSize: [22, 22],
+          iconAnchor: [11, 22],
+        }),
+        draggable: true,
+      })
+        .addTo(map)
+        .on("dragend", () => {
+          const position = markerRef.current?.getLatLng();
+          if (position) onPickRef.current(position.lat, position.lng);
+        });
+    }
+    map.flyTo(next, Math.max(map.getZoom(), 14), { duration: 0.6 });
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -110,7 +112,11 @@ export function LocationPicker({
         { headers: { Accept: "application/json" } },
       );
       if (!response.ok) throw new Error("search failed");
-      const results = (await response.json()) as { lat: string; lon: string; display_name: string }[];
+      const results = (await response.json()) as {
+        lat: string;
+        lon: string;
+        display_name: string;
+      }[];
       const first = results[0];
       if (!first) {
         setStatus("No match found — try a different address or tap the map.");
@@ -180,7 +186,11 @@ export function LocationPicker({
           disabled={searching || !query.trim()}
           className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium disabled:opacity-50"
         >
-          {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          {searching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Search className="h-4 w-4" />
+          )}
           Search
         </button>
         <button
@@ -190,7 +200,11 @@ export function LocationPicker({
           className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium disabled:opacity-50"
           title="Use my current location"
         >
-          {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
+          {locating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Crosshair className="h-4 w-4" />
+          )}
           <span className="hidden sm:inline">My location</span>
         </button>
       </div>
@@ -208,8 +222,8 @@ export function LocationPicker({
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Tap the map (or drag the pin) to place the job. Coordinates are sent as GeoJSON in
-          backend order: longitude, then latitude.
+          Tap the map (or drag the pin) to place the job. Coordinates are sent as GeoJSON in backend
+          order: longitude, then latitude.
         </p>
       )}
     </div>

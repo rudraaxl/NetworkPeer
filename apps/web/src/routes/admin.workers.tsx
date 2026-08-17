@@ -53,31 +53,42 @@ function AdminWorkers() {
     );
   }, [workers, query]);
 
-  const verifyWorker = useCallback(async (workerId: string) => {
-    setUpdatingId(workerId);
-    try {
-      await api.adminSetWorkerVerification(workerId, "VERIFIED", true, "Approved via admin console");
-      await load();
-      toast.success("Worker verified for active work.");
-    } catch (requestError) {
-      toast.error(errorMessage(requestError));
-    } finally {
-      setUpdatingId(null);
-    }
-  }, [load]);
+  const verifyWorker = useCallback(
+    async (workerId: string) => {
+      setUpdatingId(workerId);
+      try {
+        await api.adminSetWorkerVerification(
+          workerId,
+          "VERIFIED",
+          true,
+          "Approved via admin console",
+        );
+        await load();
+        toast.success("Worker verified for active work.");
+      } catch (requestError) {
+        toast.error(errorMessage(requestError));
+      } finally {
+        setUpdatingId(null);
+      }
+    },
+    [load],
+  );
 
-  const suspendWorker = useCallback(async (workerId: string) => {
-    setUpdatingId(workerId);
-    try {
-      await api.adminSetWorkerVerification(workerId, "SUSPENDED", false, "Suspended for review");
-      await load();
-      toast.success("Worker suspended for review.");
-    } catch (requestError) {
-      toast.error(errorMessage(requestError));
-    } finally {
-      setUpdatingId(null);
-    }
-  }, [load]);
+  const suspendWorker = useCallback(
+    async (workerId: string) => {
+      setUpdatingId(workerId);
+      try {
+        await api.adminSetWorkerVerification(workerId, "SUSPENDED", false, "Suspended for review");
+        await load();
+        toast.success("Worker suspended for review.");
+      } catch (requestError) {
+        toast.error(errorMessage(requestError));
+      } finally {
+        setUpdatingId(null);
+      }
+    },
+    [load],
+  );
 
   return (
     <div className="animate-rise space-y-6">
@@ -105,9 +116,15 @@ function AdminWorkers() {
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : error ? (
-          <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>
+          <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">
+            {error}
+          </p>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={ShieldCheck} title="No workers found" description="Try another search term." />
+          <EmptyState
+            icon={ShieldCheck}
+            title="No workers found"
+            description="Try another search term."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-base">
@@ -139,7 +156,15 @@ function AdminWorkers() {
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">{worker.phone_number}</td>
                       <td className="px-3 py-3">
-                        <Chip tone={status === "VERIFIED" ? "success" : status === "SUSPENDED" ? "danger" : "warning"}>
+                        <Chip
+                          tone={
+                            status === "VERIFIED"
+                              ? "success"
+                              : status === "SUSPENDED"
+                                ? "danger"
+                                : "warning"
+                          }
+                        >
                           {status}
                         </Chip>
                       </td>

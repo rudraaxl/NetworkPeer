@@ -8,13 +8,7 @@ function roleHome(role: AppRole): string {
   return "/client";
 }
 
-export function RouteGuard({
-  role,
-  children,
-}: {
-  role: AppRole;
-  children: ReactNode;
-}) {
+export function RouteGuard({ role, children }: { role: AppRole; children: ReactNode }) {
   const router = useRouter();
   const session = useAuthSession();
 

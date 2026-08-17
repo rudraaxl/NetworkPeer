@@ -26,7 +26,8 @@ function hex(bytes: Uint8Array): string {
 
 function SettleFunding() {
   const defaultOrigin = useMemo(
-    () => (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/api\/v1\/?$/, "") ?? "",
+    () =>
+      (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/api\/v1\/?$/, "") ?? "",
     [],
   );
   const [operationId, setOperationId] = useState("");
@@ -41,8 +42,8 @@ function SettleFunding() {
         <ShieldAlert className="h-10 w-10 text-warning" />
         <h1 className="mt-4 text-xl font-semibold">Settler not enabled</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This page is disabled because <code>VITE_DEMO_WEBHOOK_SECRET</code> was not set at
-          build time. It is a demo-only tool and is intentionally absent from normal builds.
+          This page is disabled because <code>VITE_DEMO_WEBHOOK_SECRET</code> was not set at build
+          time. It is a demo-only tool and is intentionally absent from normal builds.
         </p>
       </div>
     );
@@ -115,24 +116,39 @@ function SettleFunding() {
     <div className="mx-auto max-w-xl px-4 py-12">
       <h1 className="text-2xl font-semibold">Settle funding (demo tool)</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Simulates the Stripe <code>payment_intent.succeeded</code> webhook from the browser.
-        Paste the <strong>Operation ID</strong> and <strong>Provider reference</strong> returned
-        by the “Fund escrow” button, then click Settle. The job moves from{" "}
-        <code>FUNDING</code> to <code>POSTED</code>.
+        Simulates the Stripe <code>payment_intent.succeeded</code> webhook from the browser. Paste
+        the <strong>Operation ID</strong> and <strong>Provider reference</strong> returned by the
+        “Fund escrow” button, then click Settle. The job moves from <code>FUNDING</code> to{" "}
+        <code>POSTED</code>.
       </p>
 
       <div className="mt-6 space-y-4 rounded-2xl border border-border bg-card p-5 shadow-soft">
         <label className="block">
           <span className="mb-1.5 block text-base font-medium">Operation ID</span>
-          <input className={inputCls} value={operationId} onChange={(event) => setOperationId(event.target.value)} placeholder="paste operationId from the fund response" />
+          <input
+            className={inputCls}
+            value={operationId}
+            onChange={(event) => setOperationId(event.target.value)}
+            placeholder="paste operationId from the fund response"
+          />
         </label>
         <label className="block">
           <span className="mb-1.5 block text-base font-medium">Provider reference</span>
-          <input className={inputCls} value={providerReference} onChange={(event) => setProviderReference(event.target.value)} placeholder="paste providerReference (stub_pi_…)" />
+          <input
+            className={inputCls}
+            value={providerReference}
+            onChange={(event) => setProviderReference(event.target.value)}
+            placeholder="paste providerReference (stub_pi_…)"
+          />
         </label>
         <label className="block">
           <span className="mb-1.5 block text-base font-medium">API origin</span>
-          <input className={inputCls} value={origin} onChange={(event) => setOrigin(event.target.value)} placeholder="https://api.example.com" />
+          <input
+            className={inputCls}
+            value={origin}
+            onChange={(event) => setOrigin(event.target.value)}
+            placeholder="https://api.example.com"
+          />
         </label>
         <button
           type="button"

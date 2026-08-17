@@ -371,11 +371,13 @@ function WorkerHome() {
         <select
           value={radiusKm ?? ""}
           onChange={(event) => setRadiusKm(Number(event.target.value))}
-          disabled={maximumRadiusKm === null}
+          disabled={maximumRadiusKm === null && initialLocationRequested.current}
           className="h-11 rounded-2xl border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
           aria-label="Search radius"
         >
-          {radiusOptions.length === 0 && <option value="">Loading radius</option>}
+          {initialLocationRequested.current && radiusOptions.length === 0 && (
+            <option value="">Loading radius</option>
+          )}
           {radiusOptions.map((radius) => (
             <option key={radius} value={radius}>
               {radius} km radius

@@ -151,7 +151,9 @@ function VerifyOtpPage() {
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">New {destination === "CLIENT" ? "client" : "worker"} account</p>
+              <p className="text-sm font-semibold text-foreground">
+                New {destination === "CLIENT" ? "client" : "worker"} account
+              </p>
               <p className="text-sm text-muted-foreground">One quick step before you dive in.</p>
             </div>
           </div>
@@ -191,7 +193,9 @@ function VerifyOtpPage() {
           <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
             <button
               type="button"
-              onClick={() => void router.navigate({ to: destination === "CLIENT" ? "/client" : "/worker" })}
+              onClick={() =>
+                void router.navigate({ to: destination === "CLIENT" ? "/client" : "/worker" })
+              }
               disabled={status === "loading"}
               className="font-medium text-primary hover:underline disabled:text-muted-foreground"
             >
@@ -263,7 +267,9 @@ function VerifyOtpPage() {
         {pending?.developmentOtp ? (
           <p className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
             Development OTP:{" "}
-            <span className="font-semibold tracking-widest">{pending.developmentOtp}</span>
+            <span className="font-semibold tracking-widest">
+              {pending.developmentOtp.replace(/./g, "*")}
+            </span>
           </p>
         ) : null}
         <button

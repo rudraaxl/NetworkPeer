@@ -150,7 +150,10 @@ function TiltCard({
 
   const onMove = useCallback((event: { clientX: number; clientY: number }) => {
     const element = ref.current;
-    if (!element || (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches)) {
+    if (
+      !element ||
+      (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches)
+    ) {
       return;
     }
     const rect = element.getBoundingClientRect();
@@ -230,9 +233,7 @@ function Landing() {
             </Chip>
             <h1 className="mt-5 text-4xl font-bold leading-[1.05] sm:text-5xl lg:text-6xl">
               On-demand field work with{" "}
-              <span className="text-gradient-brand animate-gradient-pan">
-                proof you can trust
-              </span>
+              <span className="text-gradient-brand animate-gradient-pan">proof you can trust</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg text-muted-foreground">
               NetworkPeers pairs verified clients with verified workers — anonymously. Every task is

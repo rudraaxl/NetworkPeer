@@ -442,16 +442,13 @@ export const api = {
   clientJob(jobId: string): Promise<{ job: Job; subtasks: JobSubtask[] }> {
     return request(`/client/jobs/${encodeURIComponent(jobId)}`);
   },
-  clientJobEvidence(
-    jobId: string,
-  ): Promise<{ job: Job; evidence: EvidenceSummary[] }> {
+  clientJobEvidence(jobId: string): Promise<{ job: Job; evidence: EvidenceSummary[] }> {
     return request(`/client/jobs/${encodeURIComponent(jobId)}/evidence`);
   },
-  clientEvidenceDownloadUrl(
-    jobId: string,
-    mediaId: string,
-  ): Promise<{ url: string }> {
-    return request(`/client/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(mediaId)}/download`);
+  clientEvidenceDownloadUrl(jobId: string, mediaId: string): Promise<{ url: string }> {
+    return request(
+      `/client/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(mediaId)}/download`,
+    );
   },
   grantConsent(purpose: string): Promise<{ granted: boolean }> {
     return request("/consent", { method: "POST", body: JSON.stringify({ purpose }) });
@@ -618,7 +615,10 @@ export const api = {
     page: number;
     per_page: number;
   }> {
-    const params = new URLSearchParams({ page: String(input.page ?? 1), per_page: String(input.perPage ?? 20) });
+    const params = new URLSearchParams({
+      page: String(input.page ?? 1),
+      per_page: String(input.perPage ?? 20),
+    });
     if (input.role) params.set("role", input.role);
     return request(`/admin/users?${params.toString()}`);
   },
@@ -639,7 +639,11 @@ export const api = {
   ): Promise<{ audit_id: string; profile: unknown }> {
     return request(`/admin/workers/${encodeURIComponent(workerId)}/verification`, {
       method: "PATCH",
-      body: JSON.stringify({ verification_status: verificationStatus, is_available: isAvailable, reason }),
+      body: JSON.stringify({
+        verification_status: verificationStatus,
+        is_available: isAvailable,
+        reason,
+      }),
     });
   },
 };

@@ -35,7 +35,8 @@ function errorMessage(error: unknown): string {
 }
 
 function TotalValue({ items }: { items: { currency: string; amount: number }[] }) {
-  if (items.length === 0) return <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">—</p>;
+  if (items.length === 0)
+    return <p className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight">—</p>;
   if (items.length === 1) {
     const [item] = items;
     return (
@@ -225,8 +226,8 @@ function WorkerWallet() {
           <div className="min-w-0">
             <p className="text-sm font-semibold">Withdrawals</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Payouts are dispatched to the gateway after escrow release. Withdrawal controls
-              are not exposed by the current API yet.
+              Payouts are dispatched to the gateway after escrow release. Withdrawal controls are
+              not exposed by the current API yet.
             </p>
           </div>
         </div>
