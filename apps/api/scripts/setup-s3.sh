@@ -48,7 +48,8 @@ aws s3api put-bucket-cors \
       "AllowedOrigins": [
         "http://localhost:8080",
         "http://localhost:5173",
-        "https://networkpeer.vercel.app"
+        "https://networkpeer.vercel.app",
+        "https://network-peer-web.vercel.app"
       ],
       "ExposeHeaders": ["ETag"],
       "MaxAgeSeconds": 300

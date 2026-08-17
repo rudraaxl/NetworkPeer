@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { RealtimeSyncBridge } from "@/components/realtime-sync-bridge";
+import { flushOfflineEvidence } from "@/lib/offline-evidence";
 
 function NotFoundComponent() {
   return (
@@ -128,8 +129,26 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function useOfflineEvidenceSync() {
+  useEffect(() => {
+    let mounted = true;
+    const sync = () => {
+      if (mounted) void flushOfflineEvidence();
+    };
+    window.addEventListener("online", sync);
+    sync();
+    const interval = window.setInterval(sync, 30_000);
+    return () => {
+      mounted = false;
+      window.removeEventListener("online", sync);
+      window.clearInterval(interval);
+    };
+  }, []);
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useOfflineEvidenceSync();
 
   return (
     <QueryClientProvider client={queryClient}>
