@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authService } from "../services/auth-service.js";
@@ -83,7 +83,7 @@ function refreshTokenFromRequest(
   request: FastifyRequest,
   body: { refresh_token?: string },
 ): { token: string; browser: boolean } {
-  const cookieToken = (request as any).cookies?.[refreshCookieName];
+  const cookieToken = request.cookies?.[refreshCookieName];
   if (cookieToken) {
     requireAllowedBrowserOrigin(request);
     return { token: cookieToken, browser: true };
@@ -258,7 +258,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     const tokens = signTokenPair(tokenUser);
 
     if (body.value.transport === "browser") {
-      (reply as any).setCookie(refreshCookieName, tokens.refresh_token, cookieOptions());
+      reply.setCookie(refreshCookieName, tokens.refresh_token, cookieOptions());
       return ok({ ...browserTokenResponse(tokens), is_new_account: isNewAccount });
     }
 
@@ -286,7 +286,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
             full_name: user.full_name,
           });
           if (refresh.browser) {
-            (reply as any).setCookie(refreshCookieName, freshTokens.refresh_token, cookieOptions());
+            reply.setCookie(refreshCookieName, freshTokens.refresh_token, cookieOptions());
             return ok(browserTokenResponse(freshTokens));
           }
           return ok(freshTokens);
@@ -298,7 +298,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       if (config.COGNITO_USER_POOL_ID) {
         const result = await authService.refresh(refresh.token);
         if (refresh.browser) {
-          (reply as any).setCookie(refreshCookieName, result.refresh_token, cookieOptions());
+          reply.setCookie(refreshCookieName, result.refresh_token, cookieOptions());
           return ok(browserTokenResponse(result));
         }
         return ok(result);
@@ -326,7 +326,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       return handleAuthError(request, reply, err);
     } finally {
-      if (browser) (reply as any).clearCookie(refreshCookieName, cookieOptions());
+      if (browser) reply.clearCookie(refreshCookieName, cookieOptions());
     }
   });
 

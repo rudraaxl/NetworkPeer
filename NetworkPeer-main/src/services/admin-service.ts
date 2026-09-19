@@ -7,6 +7,9 @@ import {
   listAdminAuditLog,
   listAdminUsers,
   refundClientJob,
+  listExhaustedPaymentOperations,
+  resetPaymentOperationDispatch,
+  type ExhaustedPaymentOperation,
   updateWorkerVerificationAsAdmin,
   type AdminJobOverrideInput,
   type ListAdminAuditInput,
@@ -72,6 +75,17 @@ export class AdminService {
       const result = await adminOverrideJob(input);
       return { audit_id: result.auditId, job: result.job };
     } catch (err) {
+      // admin_override_job's CANCEL branch sets status without touching
+      // escrow_status, so enforce_job_financial_state rejects any funded job with
+      // an opaque 23514. Refunds are deliberately a separate audited action
+      // (migration 042), so point the operator at it instead of auto-refunding.
+      if (input.action === "CANCEL" && databaseErrorCode(err) === "23514") {
+        throw new AdminServiceError(
+          "REFUND_REQUIRED_BEFORE_CANCEL",
+          "This job holds escrowed funds. Issue a refund via POST /admin/jobs/:jobId/refund before cancelling.",
+          409,
+        );
+      }
       return mapDatabaseError(err);
     }
   }
@@ -145,6 +159,31 @@ export class AdminService {
         refunded_amount_cents: result.refundedAmountCents,
         currency: result.currency,
         job: result.job,
+      };
+    } catch (err) {
+      return mapDatabaseError(err);
+    }
+  }
+
+  async listStuckPayments(limit = 50): Promise<{ items: ExhaustedPaymentOperation[] }> {
+    try {
+      return { items: await listExhaustedPaymentOperations(limit) };
+    } catch (err) {
+      return mapDatabaseError(err);
+    }
+  }
+
+  async requeuePayment(input: {
+    actorUserId: string;
+    operationId: string;
+    reason: string;
+  }): Promise<{ operation_id: string; dispatch_attempts: number; next_dispatch_at: string }> {
+    try {
+      const result = await resetPaymentOperationDispatch(input);
+      return {
+        operation_id: result.operationId,
+        dispatch_attempts: result.dispatchAttempts,
+        next_dispatch_at: result.nextDispatchAt,
       };
     } catch (err) {
       return mapDatabaseError(err);

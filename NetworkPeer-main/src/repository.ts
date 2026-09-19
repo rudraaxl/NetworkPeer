@@ -2028,6 +2028,64 @@ export async function refundClientJob(input: RefundClientJobInput): Promise<Refu
   };
 }
 
+export interface ExhaustedPaymentOperation {
+  operationId: string;
+  operationType: string;
+  jobId: string | null;
+  amountCents: string;
+  currency: string;
+  clientUserId: string | null;
+  workerUserId: string | null;
+  dispatchAttempts: number;
+  lastDispatchError: string | null;
+  createdAt: string;
+}
+
+export async function listExhaustedPaymentOperations(limit = 50): Promise<ExhaustedPaymentOperation[]> {
+  const { rows } = await adminPool.query<Row>(
+    `
+      SELECT operation_id, operation_type, job_id, amount_cents, currency,
+             client_user_id, worker_user_id, dispatch_attempts,
+             last_dispatch_error, created_at
+      FROM list_exhausted_payment_operations($1::integer)
+    `,
+    [limit],
+  );
+  return rows.map((row) => ({
+    operationId: String(row["operation_id"]),
+    operationType: String(row["operation_type"]),
+    jobId: row["job_id"] === null ? null : String(row["job_id"]),
+    amountCents: String(row["amount_cents"]),
+    currency: String(row["currency"]),
+    clientUserId: row["client_user_id"] === null ? null : String(row["client_user_id"]),
+    workerUserId: row["worker_user_id"] === null ? null : String(row["worker_user_id"]),
+    dispatchAttempts: Number(row["dispatch_attempts"]),
+    lastDispatchError: row["last_dispatch_error"] === null ? null : String(row["last_dispatch_error"]),
+    createdAt: new Date(row["created_at"] as string).toISOString(),
+  }));
+}
+
+export async function resetPaymentOperationDispatch(input: {
+  actorUserId: string;
+  operationId: string;
+  reason: string;
+}): Promise<{ operationId: string; dispatchAttempts: number; nextDispatchAt: string }> {
+  const { rows } = await adminPool.query<Row>(
+    `
+      SELECT operation_id, dispatch_attempts, next_dispatch_at
+      FROM reset_payment_operation_dispatch($1, $2, $3)
+    `,
+    [input.actorUserId, input.operationId, input.reason],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Payment dispatch requeue did not return a result");
+  return {
+    operationId: String(row["operation_id"]),
+    dispatchAttempts: Number(row["dispatch_attempts"]),
+    nextDispatchAt: new Date(row["next_dispatch_at"] as string).toISOString(),
+  };
+}
+
 export async function adminSuspendUser(input: {
   actorUserId: string;
   userId: string;

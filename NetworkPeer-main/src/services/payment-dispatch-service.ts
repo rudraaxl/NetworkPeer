@@ -29,7 +29,11 @@ export class PaymentDispatchRuntime {
   async start(): Promise<void> {
     if (this.started || config.PAYMENT_DISPATCH_ENABLED !== "true") return;
     this.started = true;
-    await this.sweep();
+    // Boot must not depend on the first sweep succeeding; the interval retries.
+    await this.sweep().catch((err: unknown) => {
+      logger.error({ err }, "initial payment dispatch sweep failed");
+      captureException(err, { operation: "payment-dispatch-sweep" });
+    });
     this.timer = setInterval(() => {
       void this.sweep().catch((err: unknown) => {
         logger.error({ err }, "payment dispatch sweep failed");
@@ -112,7 +116,20 @@ export class PaymentDispatchRuntime {
       logger.info({ operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatched");
     } catch (err) {
       logger.warn({ err, operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatch released for retry");
-      await releasePaymentOperationDispatch(operation.operationId, dispatchFailureCode(err));
+      try {
+        await releasePaymentOperationDispatch(operation.operationId, dispatchFailureCode(err));
+      } catch (releaseErr) {
+        // The release raises P0002 when the operation is no longer CREATED, which
+        // happens when the gateway call succeeded but its response was lost. The
+        // lease then expires on its own. Rethrowing here would reject the whole
+        // sweep, and start() awaits the first sweep during onReady, so a single
+        // such row would block server boot.
+        logger.error(
+          { err: releaseErr, operationId: operation.operationId },
+          "payment operation dispatch release failed; leaving lease to expire",
+        );
+        captureException(releaseErr, { operation: "payment-dispatch-release" });
+      }
     }
   }
 }

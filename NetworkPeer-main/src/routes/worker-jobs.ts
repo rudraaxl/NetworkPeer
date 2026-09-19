@@ -70,22 +70,6 @@ export default async function workerJobsRoutes(app: FastifyInstance): Promise<vo
         }
       });
 
-      child.post("/worker/verify-selfie", async (request, reply) => {
-        const selfieSchema = z.object({
-          selfie_url: z.string().optional(),
-          selfie_base64: z.string().optional(),
-        }).strict();
-        const parsed = parseBody(selfieSchema, request.body);
-        if (!parsed.ok) {
-          return reply.code(400).send(fail("VALIDATION_ERROR", parsed.message));
-        }
-        try {
-          return ok({ verified: true, message: "Worker selfie verified successfully" });
-        } catch (err) {
-          return handleWorkerJobError(request, reply, err);
-        }
-      });
-
       child.post("/worker/location", async (request, reply) => {
         const parsed = parseBody(locationSchema, request.body);
         if (!parsed.ok) {

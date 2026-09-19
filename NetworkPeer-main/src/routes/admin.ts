@@ -40,6 +40,15 @@ const refundBodySchema = z.object({
   reason: z.string().trim().min(3).max(2_000),
   idempotency_key: z.string().trim().min(8).max(180),
 }).strict();
+const stuckPaymentsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+}).strict();
+const operationParamsSchema = z.object({
+  operationId: z.string().uuid(),
+}).strict();
+const requeueBodySchema = z.object({
+  reason: z.string().trim().min(3).max(2_000),
+}).strict();
 const userQuerySchema = z.object({
   role: z.enum(["CLIENT", "WORKER"]).optional(),
   is_active: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
@@ -112,6 +121,37 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
           jobId: params.data.jobId,
           reason: body.data.reason,
           idempotencyKey: body.data.idempotency_key,
+        }));
+      } catch (err) {
+        return handleAdminError(request, reply, err);
+      }
+    });
+
+    // Operations that exhausted their dispatch attempts are no longer claimed, so
+    // without this they would sit invisible.
+    child.get("/admin/payments/stuck", async (request, reply) => {
+      const query = stuckPaymentsQuerySchema.safeParse(request.query);
+      if (!query.success) {
+        return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid stuck payments query"));
+      }
+      try {
+        return ok(await adminService.listStuckPayments(query.data.limit));
+      } catch (err) {
+        return handleAdminError(request, reply, err);
+      }
+    });
+
+    child.post("/admin/payments/:operationId/requeue", async (request, reply) => {
+      const params = operationParamsSchema.safeParse(request.params);
+      const body = requeueBodySchema.safeParse(request.body);
+      if (!params.success || !body.success) {
+        return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid payment requeue request"));
+      }
+      try {
+        return ok(await adminService.requeuePayment({
+          actorUserId: request.auth.userId,
+          operationId: params.data.operationId,
+          reason: body.data.reason,
         }));
       } catch (err) {
         return handleAdminError(request, reply, err);
