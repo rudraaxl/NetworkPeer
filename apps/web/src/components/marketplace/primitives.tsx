@@ -3,50 +3,6 @@ import { ArrowDownRight, ArrowUpRight, ShieldCheck, Star } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
-import type { JobStatus, MediaKind } from "@/lib/mock-data";
-
-/* ---------------------------------- chips --------------------------------- */
-
-const statusMeta: Record<JobStatus, { label: string; tone: string }> = {
-  draft: { label: "Draft", tone: "bg-muted text-muted-foreground" },
-  open: { label: "Open", tone: "bg-primary-soft text-primary" },
-  accepted: { label: "Accepted", tone: "bg-primary-soft text-primary" },
-  en_route: {
-    label: "En route",
-    tone: "bg-brand-teal/20 text-brand-teal-foreground dark:text-brand-teal",
-  },
-  working: {
-    label: "In progress",
-    tone: "bg-warning/20 text-warning-foreground dark:text-warning",
-  },
-  submitted: { label: "Submitted", tone: "bg-info/15 text-info" },
-  in_review: {
-    label: "In review",
-    tone: "bg-warning/20 text-warning-foreground dark:text-warning",
-  },
-  completed: {
-    label: "Completed",
-    tone: "bg-success/20 text-success-foreground dark:text-success",
-  },
-  rejected: { label: "Rejected", tone: "bg-destructive/15 text-destructive" },
-  cancelled: { label: "Cancelled", tone: "bg-muted text-muted-foreground" },
-};
-
-export function StatusChip({ status, className }: { status: JobStatus; className?: string }) {
-  const meta = statusMeta[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-        meta.tone,
-        className,
-      )}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {meta.label}
-    </span>
-  );
-}
 
 export function Chip({
   children,
@@ -356,11 +312,3 @@ export function MapCanvas({
   );
 }
 
-/* -------------------------------- media ----------------------------------- */
-
-export const mediaMeta: Record<MediaKind, { label: string; tone: "primary" | "teal" | "warning" }> =
-  {
-    photo: { label: "Photo", tone: "primary" },
-    video: { label: "Video", tone: "teal" },
-    audio: { label: "Audio", tone: "warning" },
-  };

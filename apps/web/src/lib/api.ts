@@ -1,17 +1,3 @@
-function isLocalOrDemoSession(token?: string | null): boolean {
-  if (!token) return false;
-  return (
-    token.startsWith('email-session-') ||
-    token.startsWith('sms-session-') ||
-    token.startsWith('demo-') ||
-    token.startsWith('token_') ||
-    token.startsWith('email-refresh-') ||
-    token.startsWith('sms-refresh-') ||
-    token.startsWith('refresh_') ||
-    token.startsWith('jwt-mock-')
-  );
-}
-
 import { authSession, type AuthSession, type AppRole } from "@/lib/auth-session";
 import {
   jobStatusSchema,
@@ -397,12 +383,7 @@ async function refreshAccessToken(): Promise<AuthSession | null> {
         (error.statusCode === 401 || error.statusCode === 403) &&
         current?.refreshToken === sessionBeforeRefresh.refreshToken
       ) {
-        if (
-          !isLocalOrDemoSession(sessionBeforeRefresh.accessToken) &&
-          !isLocalOrDemoSession(sessionBeforeRefresh.refreshToken)
-        ) {
-          authSession.clear();
-        }
+        authSession.clear();
       }
       return null;
     }
@@ -429,330 +410,39 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     );
   }
   if (response.status === 401 && retry && current?.refreshToken) {
-    if (!isLocalOrDemoSession(current.accessToken) && !isLocalOrDemoSession(current.refreshToken)) {
-      const refreshed = await refreshAccessToken();
-      if (refreshed) return request<T>(path, init, false);
-    }
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return request<T>(path, init, false);
   }
   return parseResponse<T>(response);
 }
 
 
-interface StoredJobData {
-  job: Job;
-  subtasks: JobSubtask[];
-}
+const WORKER_SYNC_CACHE_KEY = "networkpeer_worker_sync_cache_v1";
 
-const LOCAL_JOBS_STORAGE_KEY = "networkpeer_local_jobs_v3";
-const LOCAL_EVIDENCE_STORAGE_KEY = "networkpeer_local_evidence_v3";
-
-function getSeedJobs(): StoredJobData[] {
-  const now = new Date();
-  const isoNow = now.toISOString();
-  return [
-    {
-      job: {
-        id: "job-client-audit-01",
-        client_id: "demo-client-id",
-        worker_id: null,
-        title: "Storefront Compliance Audit — MG Road",
-        description: "Inspect retail outlet storefront, signage, and merchandise visibility. GPS and timestamped photo verification required.",
-        category: "Audit",
-        status: "POSTED",
-        priority: 2,
-        budget_cents: 45000,
-        platform_fee_cents: 4500,
-        currency: "INR",
-        location: { type: "Point", coordinates: [77.6073, 12.9754] },
-        address: "MG Road, Bengaluru, Karnataka",
-        scheduled_at: new Date(Date.now() + 86400000).toISOString(),
-        started_at: null,
-        completed_at: null,
-        cancelled_at: null,
-        cancellation_reason: null,
-        metadata: {},
-        created_at: new Date(Date.now() - 3600000).toISOString(),
-        updated_at: isoNow,
-      },
-      subtasks: [
-        {
-          id: "sub-audit-01-1",
-          job_id: "job-client-audit-01",
-          title: "Capture storefront exterior and signboard in daylight",
-          description: "Full frontage must be clearly visible with sharp signage text.",
-          sequence_order: 1,
-          is_required: true,
-          status: "PENDING",
-          completed_at: null,
-          metadata: {},
-          created_at: isoNow,
-          updated_at: isoNow,
-        },
-        {
-          id: "sub-audit-01-2",
-          job_id: "job-client-audit-01",
-          title: "Verify operating trade license displayed on counter",
-          description: "Clear photograph showing registration number and date of issue.",
-          sequence_order: 2,
-          is_required: true,
-          status: "PENDING",
-          completed_at: null,
-          metadata: {},
-          created_at: isoNow,
-          updated_at: isoNow,
-        },
-      ],
-    },
-    {
-      job: {
-        id: "job-client-retail-02",
-        client_id: "demo-client-id",
-        worker_id: null,
-        title: "Shelf Display Verification — Indiranagar",
-        description: "Verify beverage cooler stock levels and promotional wobbler placement.",
-        category: "Retail",
-        status: "POSTED",
-        priority: 1,
-        budget_cents: 35000,
-        platform_fee_cents: 3500,
-        currency: "INR",
-        location: { type: "Point", coordinates: [77.6413, 12.9784] },
-        address: "100ft Road, Indiranagar, Bengaluru",
-        scheduled_at: new Date(Date.now() + 172800000).toISOString(),
-        started_at: null,
-        completed_at: null,
-        cancelled_at: null,
-        cancellation_reason: null,
-        metadata: {},
-        created_at: new Date(Date.now() - 7200000).toISOString(),
-        updated_at: isoNow,
-      },
-      subtasks: [
-        {
-          id: "sub-retail-02-1",
-          job_id: "job-client-retail-02",
-          title: "Photo of main beverage display cooler",
-          description: "Capture all shelves from top to bottom.",
-          sequence_order: 1,
-          is_required: true,
-          status: "PENDING",
-          completed_at: null,
-          metadata: {},
-          created_at: isoNow,
-          updated_at: isoNow,
-        },
-      ],
-    },
-    {
-      job: {
-        id: "job-client-photo-03",
-        client_id: "demo-client-id",
-        worker_id: "demo-worker-id",
-        title: "Commercial Real Estate Façade Documentation",
-        description: "Capture wide and detail shots of the building façade, including signage and entry points.",
-        category: "Photography",
-        status: "IN_PROGRESS",
-        priority: 3,
-        budget_cents: 75000,
-        platform_fee_cents: 7500,
-        currency: "INR",
-        location: { type: "Point", coordinates: [77.7499, 12.9698] },
-        address: "Whitefield Main Road, Bengaluru",
-        scheduled_at: new Date(Date.now() + 43200000).toISOString(),
-        started_at: new Date(Date.now() - 1800000).toISOString(),
-        completed_at: null,
-        cancelled_at: null,
-        cancellation_reason: null,
-        metadata: {},
-        created_at: new Date(Date.now() - 14400000).toISOString(),
-        updated_at: isoNow,
-      },
-      subtasks: [
-        {
-          id: "sub-photo-03-1",
-          job_id: "job-client-photo-03",
-          title: "Front architectural façade photo",
-          description: "High resolution wide shot in daylight.",
-          sequence_order: 1,
-          is_required: true,
-          status: "IN_PROGRESS",
-          completed_at: null,
-          metadata: {},
-          created_at: isoNow,
-          updated_at: isoNow,
-        },
-      ],
-    },
-    {
-      job: {
-        id: "job-client-insp-04",
-        client_id: "demo-client-id",
-        worker_id: "demo-worker-id",
-        title: "Distribution Warehouse Quality Inspection",
-        description: "Inspect inbound pallets for damage and record condition photographs for each bay.",
-        category: "Inspection",
-        status: "SUBMITTED",
-        priority: 2,
-        budget_cents: 120000,
-        platform_fee_cents: 12000,
-        currency: "INR",
-        location: { type: "Point", coordinates: [77.5256, 13.0334] },
-        address: "Peenya Industrial Area, Bengaluru",
-        scheduled_at: new Date(Date.now() - 3600000).toISOString(),
-        started_at: new Date(Date.now() - 7200000).toISOString(),
-        completed_at: null,
-        cancelled_at: null,
-        cancellation_reason: null,
-        metadata: {},
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        updated_at: isoNow,
-      },
-      subtasks: [
-        {
-          id: "sub-insp-04-1",
-          job_id: "job-client-insp-04",
-          title: "Photo of temperature recording unit display",
-          description: "Display reading must be clear and legible.",
-          sequence_order: 1,
-          is_required: true,
-          status: "COMPLETED",
-          completed_at: isoNow,
-          metadata: {},
-          created_at: isoNow,
-          updated_at: isoNow,
-        },
-      ],
-    },
-    {
-      job: {
-        id: "job-client-delivery-05",
-        client_id: "demo-client-id",
-        worker_id: "demo-worker-id",
-        title: "Secure Document Handover Verification",
-        description: "Verify recipient identity and capture a GPS-stamped photograph confirming handover.",
-        category: "Delivery",
-        status: "APPROVED",
-        priority: 1,
-        budget_cents: 50000,
-        platform_fee_cents: 5000,
-        currency: "INR",
-        location: { type: "Point", coordinates: [77.6229, 12.9352] },
-        address: "Koramangala 5th Block, Bengaluru",
-        scheduled_at: new Date(Date.now() - 86400000).toISOString(),
-        started_at: new Date(Date.now() - 90000000).toISOString(),
-        completed_at: new Date(Date.now() - 7200000).toISOString(),
-        cancelled_at: null,
-        cancellation_reason: null,
-        metadata: {},
-        created_at: new Date(Date.now() - 172800000).toISOString(),
-        updated_at: isoNow,
-      },
-      subtasks: [
-        {
-          id: "sub-del-05-1",
-          job_id: "job-client-delivery-05",
-          title: "Recipient signature acknowledgement",
-          description: "Photo of signed receipt form.",
-          sequence_order: 1,
-          is_required: true,
-          status: "COMPLETED",
-          completed_at: isoNow,
-          metadata: {},
-          created_at: isoNow,
-          updated_at: isoNow,
-        },
-      ],
-    },
-  ];
-}
-
-const localStore = {
-  load(): StoredJobData[] {
-    if (typeof window === "undefined") return getSeedJobs();
-    try {
-      const raw = window.localStorage.getItem(LOCAL_JOBS_STORAGE_KEY);
-      if (!raw) {
-        const seeds = getSeedJobs();
-        window.localStorage.setItem(LOCAL_JOBS_STORAGE_KEY, JSON.stringify(seeds));
-        return seeds;
-      }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      const seeds = getSeedJobs();
-      window.localStorage.setItem(LOCAL_JOBS_STORAGE_KEY, JSON.stringify(seeds));
-      return seeds;
-    } catch {
-      return getSeedJobs();
-    }
-  },
-  save(items: StoredJobData[]): void {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(LOCAL_JOBS_STORAGE_KEY, JSON.stringify(items));
-    } catch {}
-  },
-  add(job: Job, subtasks: JobSubtask[]): StoredJobData {
-    const items = this.load();
-    const entry: StoredJobData = { job, subtasks };
-    items.unshift(entry);
-    this.save(items);
-    return entry;
-  },
-  find(jobId: string): StoredJobData | null {
-    const items = this.load();
-    return items.find((i) => i.job.id === jobId) ?? null;
-  },
-  update(jobId: string, updateFn: (entry: StoredJobData) => StoredJobData): StoredJobData | null {
-    const items = this.load();
-    const idx = items.findIndex((i) => i.job.id === jobId);
-    if (idx < 0) return null;
-    const updated = updateFn(items[idx]);
-    items[idx] = updated;
-    this.save(items);
-    return updated;
-  },
-};
-
-function getLocalEvidence(jobId: string): EvidenceSummary[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(`${LOCAL_EVIDENCE_STORAGE_KEY}_${jobId}`);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [
-    {
-      id: `ev-${jobId}-1`,
-      job_id: jobId,
-      subtask_id: `sub-${jobId}-1`,
-      media_type: "IMAGE",
-      mime_type: "image/jpeg",
-      file_size_bytes: 345200,
-      captured_at: new Date(Date.now() - 1800000).toISOString(),
-      uploaded_at: new Date(Date.now() - 1700000).toISOString(),
-      status: "VERIFIED",
-      preview_url: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
-      ocrStatus: "ready",
-      ocrResult: {
-        engineVersion: "np-ocr-v2",
-        modelName: "np-ocr-v2",
-        text: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。\nPhysical evidence confirmed at designated site coordinates.\nDocument Unit #1 verified via Indic Engine.",
-        hindiText: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。",
-        englishText: "Physical evidence confirmed at designated site coordinates.\nDocument Unit #1 verified via Indic Engine.",
-        confidence: 0.984,
-        language: "hi+en",
-        detectedScript: "bilingual",
-        generatedAt: new Date().toISOString(),
-      },
-    },
-  ];
-}
-
-function saveLocalEvidence(jobId: string, evidence: EvidenceSummary[]): void {
+// Field workers lose signal mid-job, so the last successful /worker/sync payload
+// is kept for offline reads. Only server-returned data is ever written here.
+function cacheWorkerSync(result: WorkerSyncResult): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(`${LOCAL_EVIDENCE_STORAGE_KEY}_${jobId}`, JSON.stringify(evidence));
-  } catch {}
+    window.localStorage.setItem(
+      WORKER_SYNC_CACHE_KEY,
+      JSON.stringify({ cachedAt: new Date().toISOString(), result }),
+    );
+  } catch {
+    // Storage unavailable (private mode, quota). Caching is best effort.
+  }
 }
+
+export function loadCachedWorkerSync(): { cachedAt: string; result: WorkerSyncResult } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(WORKER_SYNC_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 
 export const api = {
   async requestEmailOtp(email: string, role?: string): Promise<OtpRequestResult> {
@@ -862,183 +552,48 @@ export const api = {
     });
   },
   async createClientJob(input: CreateJobInput): Promise<Job> {
-    const user = authSession.get()?.user;
-    const newJobId = `job-cli-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const now = new Date().toISOString();
-    const createdJob: Job = {
-      id: newJobId,
-      client_id: user?.id || "usr_client_local",
-      worker_id: null,
-      title: input.title,
-      description: input.description,
-      category: input.category,
-      status: "POSTED",
-      priority: 1,
-      budget_cents: input.budget_cents,
-      platform_fee_cents: Math.round(input.budget_cents * 0.1),
-      currency: input.currency || "INR",
-      location: input.location,
-      address: input.address || "Bengaluru, Karnataka",
-      scheduled_at: input.scheduled_at || new Date(Date.now() + 86400000).toISOString(),
-      started_at: null,
-      completed_at: null,
-      cancelled_at: null,
-      cancellation_reason: null,
-      metadata: {},
-      created_at: now,
-      updated_at: now,
-    };
-    const subtasks: JobSubtask[] = (input.subtasks || []).map((s, idx) => ({
-      id: `sub-${newJobId}-${idx + 1}`,
-      job_id: newJobId,
-      title: s.title,
-      description: s.description || null,
-      sequence_order: idx + 1,
-      is_required: s.is_required !== false,
-      status: "PENDING",
-      completed_at: null,
-      metadata: {},
-      created_at: now,
-      updated_at: now,
-    }));
-    localStore.add(createdJob, subtasks);
-
-    try {
-      const remote = await request<Job>("/client/jobs", { method: "POST", body: JSON.stringify(input) });
-      localStore.update(newJobId, (e) => ({ ...e, job: { ...e.job, ...remote } }));
-      return remote;
-    } catch {
-      return createdJob;
-    }
+    return request<Job>("/client/jobs", { method: "POST", body: JSON.stringify(input) });
   },
   async fundClientJob(jobId: string, idempotencyKey: string): Promise<FundingResult> {
-    try {
-      return await request(`/client/jobs/${encodeURIComponent(jobId)}/fund`, {
-        method: "POST",
-        body: JSON.stringify({ idempotency_key: idempotencyKey }),
-      });
-    } catch {
-      const found = localStore.find(jobId);
-      if (found) {
-        localStore.update(jobId, (e) => ({
-          ...e,
-          job: { ...e.job, status: "POSTED" },
-        }));
-      }
-      return {
-        operationId: idempotencyKey,
-        ledgerTransactionId: `tx_escrow_${Date.now()}`,
-        amountCents: String(found?.job.budget_cents ?? 45000),
-        currency: "INR",
-        status: "SUCCEEDED",
-        providerReference: `REF_${Date.now()}`,
-        clientSecret: null,
-      };
-    }
+    return request<FundingResult>(`/client/jobs/${encodeURIComponent(jobId)}/fund`, {
+      method: "POST",
+      body: JSON.stringify({ idempotency_key: idempotencyKey }),
+    });
   },
   async approveClientJob(jobId: string, idempotencyKey: string): Promise<ApprovalResult> {
-    try {
-      return await request(`/client/jobs/${encodeURIComponent(jobId)}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ idempotency_key: idempotencyKey }),
-      });
-    } catch {
-      const found = localStore.find(jobId);
-      if (found) {
-        localStore.update(jobId, (e) => ({
-          ...e,
-          job: { ...e.job, status: "APPROVED", completed_at: new Date().toISOString() },
-        }));
-      }
-      return {
-        jobId,
-        status: "APPROVED",
-        settlementLedgerTransactionId: `tx_settle_${Date.now()}`,
-        payoutOperationId: idempotencyKey,
-        payoutAmountCents: String(found?.job.budget_cents ?? 45000),
-        currency: "INR",
-        payoutStatus: "SUCCEEDED",
-        payoutProviderReference: `PO_${Date.now()}`,
-        payoutDispatchPending: false,
-      };
-    }
+    return request<ApprovalResult>(`/client/jobs/${encodeURIComponent(jobId)}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ idempotency_key: idempotencyKey }),
+    });
   },
-  async clientWallet(): Promise<{ balances: WalletBalance[] }> {
-    try {
-      return await request("/client/wallet");
-    } catch {
-      return {
-        balances: [
-          {
-            currency: "INR",
-            availableBalanceCents: "2500000",
-            pendingEscrowCents: "45000",
-            lifetimeEarningsCents: "0",
-            lifetimeSpendCents: "1280000",
-          },
-        ],
-      };
-    }
+  clientWallet(): Promise<{ balances: WalletBalance[] }> {
+    return request<{ balances: WalletBalance[] }>("/client/wallet");
   },
-  async clientJobs(
+  clientJobs(
     input: {
       status?: JobStatus;
       page?: number;
       perPage?: number;
     } = {},
   ): Promise<{ items: Job[]; total: number; page: number; perPage: number }> {
-    const localItems = localStore.load().map((i) => i.job);
-    let remoteItems: Job[] = [];
-    try {
-      const params = new URLSearchParams({
-        page: String(input.page ?? 1),
-        per_page: String(input.perPage ?? 20),
-      });
-      if (input.status) params.set("status", input.status);
-      const res = await request<{ items: Job[]; total: number; page: number; perPage: number }>(
-        `/client/jobs?${params.toString()}`,
-      );
-      remoteItems = res.items || [];
-    } catch {}
-
-    const merged = [...localItems];
-    for (const r of remoteItems) {
-      if (!merged.some((m) => m.id === r.id)) {
-        merged.push(r);
-      }
-    }
-    const filtered = input.status ? merged.filter((j) => j.status === input.status) : merged;
-    return {
-      items: filtered,
-      total: filtered.length,
-      page: input.page ?? 1,
-      perPage: input.perPage ?? 20,
-    };
+    const params = new URLSearchParams({
+      page: String(input.page ?? 1),
+      per_page: String(input.perPage ?? 20),
+    });
+    if (input.status) params.set("status", input.status);
+    return request<{ items: Job[]; total: number; page: number; perPage: number }>(
+      `/client/jobs?${params.toString()}`,
+    );
   },
-  async clientJob(jobId: string): Promise<{ job: Job; subtasks: JobSubtask[] }> {
-    try {
-      const remote = await request<{ job: Job; subtasks: JobSubtask[] }>(
-        `/client/jobs/${encodeURIComponent(jobId)}`,
-      );
-      return remote;
-    } catch {
-      const found = localStore.find(jobId) ?? localStore.load()[0];
-      return {
-        job: found.job,
-        subtasks: found.subtasks,
-      };
-    }
+  clientJob(jobId: string): Promise<{ job: Job; subtasks: JobSubtask[] }> {
+    return request<{ job: Job; subtasks: JobSubtask[] }>(
+      `/client/jobs/${encodeURIComponent(jobId)}`,
+    );
   },
-  async clientJobEvidence(jobId: string): Promise<{ job: Job; evidence: EvidenceSummary[] }> {
-    try {
-      return await request(`/client/jobs/${encodeURIComponent(jobId)}/evidence`);
-    } catch {
-      const found = localStore.find(jobId) ?? localStore.load()[0];
-      return {
-        job: found.job,
-        evidence: getLocalEvidence(jobId),
-      };
-    }
+  clientJobEvidence(jobId: string): Promise<{ job: Job; evidence: EvidenceSummary[] }> {
+    return request<{ job: Job; evidence: EvidenceSummary[] }>(
+      `/client/jobs/${encodeURIComponent(jobId)}/evidence`,
+    );
   },
   clientEvidenceDownloadUrl(jobId: string, mediaId: string): Promise<{ url: string }> {
     return request<{ url: string }>(
@@ -1060,31 +615,17 @@ export const api = {
       body: JSON.stringify({ job_id: jobId, reason }),
     });
   },
-  async cancelClientJob(
+  cancelClientJob(
     jobId: string,
     cancellationReason?: string,
   ): Promise<{ job: Job; cancelled: boolean }> {
-    try {
-      return await request(`/client/jobs/${encodeURIComponent(jobId)}/cancel`, {
+    return request<{ job: Job; cancelled: boolean }>(
+      `/client/jobs/${encodeURIComponent(jobId)}/cancel`,
+      {
         method: "POST",
         body: JSON.stringify(cancellationReason ? { cancellation_reason: cancellationReason } : {}),
-      });
-    } catch {
-      const found = localStore.find(jobId);
-      if (found) {
-        const updated = localStore.update(jobId, (e) => ({
-          ...e,
-          job: {
-            ...e.job,
-            status: "CANCELLED",
-            cancelled_at: new Date().toISOString(),
-            cancellation_reason: cancellationReason || "Cancelled by client",
-          },
-        }));
-        if (updated) return { job: updated.job, cancelled: true };
-      }
-      throw new ApiError("JOB_NOT_FOUND", "Job not found", 404);
-    }
+      },
+    );
   },
   updateWorkerLocation(input: {
     latitude: number;
@@ -1092,7 +633,7 @@ export const api = {
   }): Promise<{ updated_at: string }> {
     return request<{ updated_at: string }>("/worker/location", { method: "POST", body: JSON.stringify(input) });
   },
-  async nearbyWorkerJobs(
+  nearbyWorkerJobs(
     input: {
       radiusKm?: number;
       page?: number;
@@ -1107,129 +648,25 @@ export const api = {
     next_page: number | null;
     is_available: boolean;
   }> {
-    const localAvailable = localStore
-      .load()
-      .filter((i) => i.job.status === "POSTED" || i.job.status === "ASSIGNED" || i.job.status === "IN_PROGRESS")
-      .map((i): WorkerJobSummary => ({
-        id: i.job.id,
-        title: i.job.title,
-        description: i.job.description,
-        category: i.job.category,
-        priority: i.job.priority,
-        budget_cents: i.job.budget_cents,
-        currency: i.job.currency,
-        scheduled_at: i.job.scheduled_at,
-        created_at: i.job.created_at,
-        distance_band: "1_TO_5_KM",
-      }));
-
-    let remoteItems: WorkerJobSummary[] = [];
-    try {
-      const params = new URLSearchParams({
-        page: String(input.page ?? 1),
-        per_page: String(input.perPage ?? 20),
-      });
-      if (input.radiusKm !== undefined) params.set("radius_km", String(input.radiusKm));
-      const res = await request<{ items: WorkerJobSummary[] }>(`/worker/jobs/nearby?${params.toString()}`);
-      remoteItems = res.items || [];
-    } catch {}
-
-    const merged = [...localAvailable];
-    for (const r of remoteItems) {
-      if (!merged.some((m) => m.id === r.id)) merged.push(r);
-    }
-
-    return {
-      items: merged,
-      page: input.page ?? 1,
-      perPage: input.perPage ?? 50,
-      radius_km: input.radiusKm ?? 25,
-      has_more: false,
-      next_page: null,
-      is_available: true,
-    };
+    const params = new URLSearchParams({
+      page: String(input.page ?? 1),
+      per_page: String(input.perPage ?? 20),
+    });
+    if (input.radiusKm !== undefined) params.set("radius_km", String(input.radiusKm));
+    return request(`/worker/jobs/nearby?${params.toString()}`);
   },
-  async workerJob(jobId: string): Promise<WorkerJobDetail> {
-    try {
-      return await request(`/worker/jobs/${encodeURIComponent(jobId)}`);
-    } catch {
-      const found = localStore.find(jobId) ?? localStore.load()[0];
-      const current = authSession.get();
-      return {
-        id: found.job.id,
-        title: found.job.title,
-        description: found.job.description,
-        category: found.job.category,
-        status: found.job.status,
-        priority: found.job.priority,
-        budget_cents: found.job.budget_cents,
-        currency: found.job.currency,
-        scheduled_at: found.job.scheduled_at,
-        created_at: found.job.created_at,
-        updated_at: found.job.updated_at,
-        location: found.job.location,
-        address: found.job.address,
-        is_assigned_to_requester:
-          found.job.worker_id === current?.user.id ||
-          found.job.status === "ASSIGNED" ||
-          found.job.status === "IN_PROGRESS" ||
-          found.job.status === "SUBMITTED" ||
-          found.job.status === "APPROVED",
-        subtasks: found.subtasks,
-      };
-    }
+  workerJob(jobId: string): Promise<WorkerJobDetail> {
+    return request<WorkerJobDetail>(`/worker/jobs/${encodeURIComponent(jobId)}`);
   },
-  async acceptWorkerJob(jobId: string): Promise<WorkerJobDetail> {
-    try {
-      return await request(`/worker/jobs/${encodeURIComponent(jobId)}/accept`, { method: "POST" });
-    } catch {
-      const current = authSession.get();
-      const updated = localStore.update(jobId, (e) => ({
-        ...e,
-        job: {
-          ...e.job,
-          status: "ASSIGNED",
-          worker_id: current?.user.id || "usr_worker_local",
-        },
-      }));
-      const item = updated ?? localStore.load()[0];
-      return {
-        id: item.job.id,
-        title: item.job.title,
-        description: item.job.description,
-        category: item.job.category,
-        status: "ASSIGNED",
-        priority: item.job.priority,
-        budget_cents: item.job.budget_cents,
-        currency: item.job.currency,
-        scheduled_at: item.job.scheduled_at,
-        created_at: item.job.created_at,
-        updated_at: new Date().toISOString(),
-        location: item.job.location,
-        address: item.job.address,
-        is_assigned_to_requester: true,
-        subtasks: item.subtasks,
-      };
-    }
+  acceptWorkerJob(jobId: string): Promise<WorkerJobDetail> {
+    return request<WorkerJobDetail>(`/worker/jobs/${encodeURIComponent(jobId)}/accept`, {
+      method: "POST",
+    });
   },
-  async workerWallet(): Promise<{ balances: WalletBalance[] }> {
-    try {
-      return await request("/worker/wallet");
-    } catch {
-      return {
-        balances: [
-          {
-            currency: "INR",
-            availableBalanceCents: "485000",
-            pendingEscrowCents: "120000",
-            lifetimeEarningsCents: "1840000",
-            lifetimeSpendCents: "0",
-          },
-        ],
-      };
-    }
+  workerWallet(): Promise<{ balances: WalletBalance[] }> {
+    return request<{ balances: WalletBalance[] }>("/worker/wallet");
   },
-  async workerProfile(): Promise<{
+  workerProfile(): Promise<{
     verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "SUSPENDED";
     preferredRadiusKm: number;
     isAvailable: boolean;
@@ -1238,152 +675,43 @@ export const api = {
     eligibleRoles?: string[];
     eligible_roles?: string[];
   }> {
-    try {
-      return await request("/worker/profile");
-    } catch {
-      return {
-        verificationStatus: "VERIFIED",
-        preferredRadiusKm: 25,
-        isAvailable: true,
-        currentLocation: { type: "Point", coordinates: [77.5946, 12.9716] },
-        lastLocationUpdate: new Date().toISOString(),
-        eligibleRoles: ["collectionist", "correctionist"],
-        eligible_roles: ["collectionist", "correctionist"],
-      };
-    }
+    return request("/worker/profile");
   },
-  async workerReviewQueue(jobId?: string): Promise<{ submissions: ReviewSubmissionItem[] }> {
-    try {
-      if (jobId) {
-        return await request(`/worker/jobs/${encodeURIComponent(jobId)}/review-queue`);
-      }
-      return await request("/worker/review-queue");
-    } catch {
-      return {
-        submissions: [
-          {
-            id: "sub-rev-001",
-            jobId: jobId || "job-doc-verified-01",
-            unitRef: "Unit #1 — Front Signboard & Entry",
-            mediaUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
-            thumbnailUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=300&q=80",
-            ocrResult: {
-              engineVersion: "np-ocr-v2",
-              text: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。\nPhysical evidence confirmed at designated site coordinates.\nDocument Unit #1 verified via Indic Engine.",
-              hindiText: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。",
-              englishText: "Physical evidence confirmed at designated site coordinates.\nDocument Unit #1 verified via Indic Engine.",
-              confidence: 0.984,
-              language: "hi+en",
-              detectedScript: "Bilingual",
-              generatedAt: new Date().toISOString(),
-            },
-            ocrStatus: "ready",
-            ocrSnippet: "दस्तावेज़ सत्यापन सफल: प्रपत्र सं. NP-2026-IN / Physical evidence confirmed",
-            status: "pending_review",
-            submittedAt: new Date(Date.now() - 1800000).toISOString(),
-          },
-          {
-            id: "sub-rev-002",
-            jobId: jobId || "job-doc-verified-02",
-            unitRef: "Unit #2 — Official Government License",
-            mediaUrl: "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=1200&q=80",
-            thumbnailUrl: "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=300&q=80",
-            ocrResult: {
-              engineVersion: "np-ocr-v2",
-              text: "प्रमाण पत्र सं: DL-COMM-89421\nस्थान: नई दिल्ली, पिन कोड 110001\nTrade License Registration Certificate Verified.",
-              hindiText: "प्रमाण पत्र सं: DL-COMM-89421\nस्थान: नई दिल्ली, पिन कोड 110001",
-              englishText: "Trade License Registration Certificate Verified.",
-              confidence: 0.978,
-              language: "hi+en",
-              detectedScript: "Bilingual",
-              generatedAt: new Date().toISOString(),
-            },
-            ocrStatus: "ready",
-            ocrSnippet: "प्रमाण पत्र सं: DL-COMM-89421 / Trade License Certificate Verified",
-            status: "pending_review",
-            submittedAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-        ],
-      };
-    }
+  workerReviewQueue(jobId?: string): Promise<{ submissions: ReviewSubmissionItem[] }> {
+    return request<{ submissions: ReviewSubmissionItem[] }>(
+      jobId ? `/worker/jobs/${encodeURIComponent(jobId)}/review-queue` : "/worker/review-queue",
+    );
   },
-  async submitReviewDecision(
+  submitReviewDecision(
     submissionId: string,
     decision: "approve" | "redo" | "reject",
     note?: string,
   ): Promise<{ success: boolean }> {
-    try {
-      return await request(`/submissions/${encodeURIComponent(submissionId)}/review`, {
-        method: "POST",
-        body: JSON.stringify({ decision, note }),
-      });
-    } catch {
-      return { success: true };
-    }
+    return request<{ success: boolean }>(
+      `/submissions/${encodeURIComponent(submissionId)}/review`,
+      { method: "POST", body: JSON.stringify({ decision, note }) },
+    );
   },
-  workerJobs(): Promise<WorkerSyncResult> {
-    return request<WorkerSyncResult>("/worker/sync?cursor=0&limit=100").catch(() => {
-      const items = localStore.load().map((i): WorkerJobDetail => ({
-        id: i.job.id,
-        title: i.job.title,
-        description: i.job.description,
-        category: i.job.category,
-        status: i.job.status,
-        priority: i.job.priority,
-        budget_cents: i.job.budget_cents,
-        currency: i.job.currency,
-        scheduled_at: i.job.scheduled_at,
-        created_at: i.job.created_at,
-        updated_at: i.job.updated_at,
-        location: i.job.location,
-        address: i.job.address,
-        is_assigned_to_requester: true,
-        subtasks: i.subtasks,
-      }));
-      return {
-        events: [],
-        jobs: items,
-        snapshot_jobs: items,
-        ledger_entries: [],
-        removed_job_ids: [],
-        has_more: false,
-        next_cursor: "0",
-      };
-    });
+  async workerJobs(): Promise<WorkerSyncResult> {
+    const result = await request<WorkerSyncResult>("/worker/sync?cursor=0&limit=100");
+    cacheWorkerSync(result);
+    return result;
   },
-  async workerEvidence(jobId: string): Promise<{ job_id: string; evidence: EvidenceSummary[] }> {
-    try {
-      return await request(`/work/jobs/${encodeURIComponent(jobId)}/evidence`);
-    } catch {
-      return {
-        job_id: jobId,
-        evidence: getLocalEvidence(jobId),
-      };
-    }
+  workerEvidence(jobId: string): Promise<{ job_id: string; evidence: EvidenceSummary[] }> {
+    return request<{ job_id: string; evidence: EvidenceSummary[] }>(
+      `/work/jobs/${encodeURIComponent(jobId)}/evidence`,
+    );
   },
-  async advanceWorkStatus(
+  advanceWorkStatus(
     jobId: string,
     status: "EN_ROUTE" | "AT_LOCATION" | "IN_PROGRESS",
   ): Promise<Job> {
-    try {
-      return await request("/work/status", {
-        method: "POST",
-        body: JSON.stringify({ job_id: jobId, status }),
-      });
-    } catch {
-      const updated = localStore.update(jobId, (e) => ({
-        ...e,
-        job: {
-          ...e.job,
-          status,
-          started_at: e.job.started_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      }));
-      return updated ? updated.job : localStore.load()[0].job;
-    }
+    return request<Job>("/work/status", {
+      method: "POST",
+      body: JSON.stringify({ job_id: jobId, status }),
+    });
   },
-  async reserveEvidenceUpload(input: {
+  reserveEvidenceUpload(input: {
     jobId: string;
     subtaskId: string;
     mediaType: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT";
@@ -1394,112 +722,43 @@ export const api = {
     idempotencyKey: string;
     location?: { latitude: number; longitude: number };
   }): Promise<{ evidence: EvidenceSummary; upload: EvidenceUploadTarget | null }> {
-    try {
-      return await request("/work/upload-url", {
-        method: "POST",
-        body: JSON.stringify({
-          job_id: input.jobId,
-          subtask_id: input.subtaskId,
-          media_type: input.mediaType,
-          mime_type: input.mimeType,
-          file_size_bytes: input.fileSizeBytes,
-          captured_at: input.capturedAt,
-          checksum_sha256: input.checksumSha256,
-          idempotency_key: input.idempotencyKey,
-          ...(input.location ? { location: input.location } : {}),
-        }),
-      });
-    } catch {
-      const mediaId = `ev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const evidence: EvidenceSummary = {
-        id: mediaId,
+    return request("/work/upload-url", {
+      method: "POST",
+      body: JSON.stringify({
         job_id: input.jobId,
         subtask_id: input.subtaskId,
         media_type: input.mediaType,
         mime_type: input.mimeType,
         file_size_bytes: input.fileSizeBytes,
         captured_at: input.capturedAt,
-        uploaded_at: null,
-        status: "PENDING",
-        preview_url: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
-        ocrStatus: "ready",
-        ocrResult: {
-          engineVersion: "np-ocr-v2",
-          modelName: "np-ocr-v2",
-          text: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。\nPhysical evidence confirmed at designated site coordinates.\nDocument Unit #1 verified via Indic Engine.",
-          hindiText: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。",
-          englishText: "Physical evidence confirmed at designated site coordinates.\nDocument Unit #1 verified via Indic Engine.",
-          confidence: 0.984,
-          language: "hi+en",
-          detectedScript: "bilingual",
-          generatedAt: new Date().toISOString(),
-        },
-      };
-      const currentList = getLocalEvidence(input.jobId);
-      saveLocalEvidence(input.jobId, [evidence, ...currentList]);
-      return { evidence, upload: null };
-    }
+        checksum_sha256: input.checksumSha256,
+        idempotency_key: input.idempotencyKey,
+        ...(input.location ? { location: input.location } : {}),
+      }),
+    });
   },
   async uploadEvidenceToStorage(target: EvidenceUploadTarget, file: File): Promise<void> {
+    const form = new FormData();
+    for (const [name, value] of Object.entries(target.fields)) form.append(name, value);
+    form.append("file", file);
+    let response: Response;
     try {
-      const form = new FormData();
-      for (const [name, value] of Object.entries(target.fields)) form.append(name, value);
-      form.append("file", file);
-      const response = await fetch(target.url, { method: "POST", body: form });
-      if (!response.ok) {
-        throw new Error("Upload non-200");
-      }
+      response = await fetch(target.url, { method: "POST", body: form });
     } catch {
-      // Graceful offline evidence capture
+      throw new ApiError("UPLOAD_FAILED", "Could not reach evidence storage. Check your connection.", 0);
+    }
+    if (!response.ok) {
+      throw new ApiError("UPLOAD_FAILED", "Evidence upload was rejected by storage.", response.status);
     }
   },
-  async confirmEvidence(mediaId: string): Promise<EvidenceSummary> {
-    try {
-      return await request("/work/evidence", {
-        method: "POST",
-        body: JSON.stringify({ media_id: mediaId }),
-      });
-    } catch {
-      return {
-        id: mediaId,
-        job_id: "job-active",
-        subtask_id: "sub-1",
-        media_type: "IMAGE",
-        mime_type: "image/jpeg",
-        file_size_bytes: 102400,
-        captured_at: new Date().toISOString(),
-        uploaded_at: new Date().toISOString(),
-        status: "VERIFIED",
-        preview_url: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
-        ocrStatus: "ready",
-        ocrResult: {
-          engineVersion: "np-ocr-v2",
-          modelName: "np-ocr-v2",
-          text: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。",
-          hindiText: "दस्तावेज़ सत्यापन सफल: नेटवर्कपीयर प्रपत्र सं. NP-2026-IN\nभौतिक साक्ष्य: दुकान साइनबोर्ड एवं जीपीएस स्थान सत्यापित。",
-          englishText: "Physical evidence confirmed at designated site coordinates.",
-          confidence: 0.984,
-          language: "hi+en",
-          detectedScript: "bilingual",
-          generatedAt: new Date().toISOString(),
-        },
-      };
-    }
+  confirmEvidence(mediaId: string): Promise<EvidenceSummary> {
+    return request<EvidenceSummary>("/work/evidence", {
+      method: "POST",
+      body: JSON.stringify({ media_id: mediaId }),
+    });
   },
-  async submitWork(jobId: string): Promise<Job> {
-    try {
-      return await request("/work/submit", { method: "POST", body: JSON.stringify({ job_id: jobId }) });
-    } catch {
-      const updated = localStore.update(jobId, (e) => ({
-        ...e,
-        job: {
-          ...e.job,
-          status: "SUBMITTED",
-          updated_at: new Date().toISOString(),
-        },
-      }));
-      return updated ? updated.job : localStore.load()[0].job;
-    }
+  submitWork(jobId: string): Promise<Job> {
+    return request<Job>("/work/submit", { method: "POST", body: JSON.stringify({ job_id: jobId }) });
   },
   adminAnalytics(): Promise<{
     as_of: string;

@@ -18,7 +18,6 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { jobs as mockJobs } from "@/lib/mock-data";
 
 import { PageHeader } from "@/components/shell/portal-shell";
 import {
@@ -79,38 +78,7 @@ function ClientDashboard() {
     queryFn: api.clientWallet,
   });
 
-  const fallbackJobs = useMemo<Job[]>(() => {
-    return mockJobs.map((m, idx) => ({
-      id: m.id || `job-${idx + 1}`,
-      client_id: "demo-client-id",
-      worker_id: idx % 2 === 0 ? "demo-worker-id" : null,
-      title: m.title,
-      description: m.description,
-      category: m.category,
-      status: (idx === 0 ? "IN_PROGRESS" : idx === 1 ? "SUBMITTED" : idx === 2 ? "COMPLETED" : "POSTED") as Job["status"],
-      priority: m.priority === "urgent" ? 3 : m.priority === "high" ? 2 : 1,
-      budget_cents: m.payment * 100,
-      platform_fee_cents: Math.round(m.payment * 10),
-      currency: "INR",
-      escrow_status: "HELD" as const,
-      funded_at: new Date().toISOString(),
-      location: { type: "Point" as const, coordinates: [77.5946, 12.9716] as [number, number] },
-      address: m.location,
-      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
-      started_at: new Date().toISOString(),
-      completed_at: idx === 2 ? new Date().toISOString() : null,
-      cancelled_at: null,
-      cancellation_reason: null,
-      metadata: {},
-      created_at: new Date(Date.now() - idx * 3600000).toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
-  }, []);
-
-  const jobs = useMemo(() => {
-    const fetched = jobsQuery.data?.items ?? [];
-    return fetched.length > 0 ? fetched : fallbackJobs;
-  }, [jobsQuery.data?.items, fallbackJobs]);
+  const jobs = useMemo(() => jobsQuery.data?.items ?? [], [jobsQuery.data?.items]);
 
   const activeJobs = useMemo(() => jobs.filter((job) => activeStatuses.has(job.status)), [jobs]);
   const completedJobs = useMemo(
@@ -123,11 +91,10 @@ function ClientDashboard() {
   );
   const balances = useMemo(() => walletQuery.data?.balances ?? [], [walletQuery]);
 
-  const balanceTotal = useMemo(() => {
-    const total =
-      walletTotal(balances, "availableBalanceCents") + walletTotal(balances, "pendingEscrowCents");
-    return total > 0 ? total : 2450.0;
-  }, [balances]);
+  const balanceTotal = useMemo(
+    () => walletTotal(balances, "availableBalanceCents") + walletTotal(balances, "pendingEscrowCents"),
+    [balances],
+  );
 
   const latestJobs = useMemo(() => {
     return [...jobs]

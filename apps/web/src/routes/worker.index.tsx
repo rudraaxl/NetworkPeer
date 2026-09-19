@@ -24,12 +24,12 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   api,
   ApiError,
+  loadCachedWorkerSync,
   type ReviewSubmissionItem,
   type WorkerJobDetail,
   type WorkerJobSummary,
 } from "@/lib/api";
 import { AnonymousBadge, Chip, MapCanvas, SectionCard } from "@/components/marketplace/primitives";
-import { jobs as mockJobs } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/worker/")({
   head: () => ({
@@ -149,7 +149,7 @@ const JobListSkeleton = memo(function JobListSkeleton() {
   );
 });
 
-const WorkerActiveJobCard = memo(function WorkerActiveJobCard({ job }: { job: WorkerJobSummary }) {
+const WorkerActiveJobCard = memo(function WorkerActiveJobCard({ job }: { job: WorkerJobDetail }) {
   return (
     <article className="rounded-2xl border border-success/40 bg-success/5 p-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -405,7 +405,8 @@ function WorkerHome() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<WorkerJobSummary[]>([]);
-  const [activeJobs, setActiveJobs] = useState<WorkerJobSummary[] | null>(null);
+  const [activeJobs, setActiveJobs] = useState<WorkerJobDetail[] | null>(null);
+  const [activeJobsStaleAt, setActiveJobsStaleAt] = useState<string | null>(null);
   const [workerAvailable, setWorkerAvailable] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -462,40 +463,29 @@ function WorkerHome() {
     void loadJobs();
   }, [loadProfile, loadJobs]);
 
-  // Load active jobs
+  // Load active jobs. Field workers lose signal mid-job, so on failure we fall
+  // back to the last synced payload and label it, rather than showing nothing.
   useEffect(() => {
     let active = true;
     void api
       .workerJobs()
       .then((result) => {
-        if (active) setActiveJobs((result as any).items ?? result.jobs ?? []);
+        if (!active) return;
+        setActiveJobs(result.jobs ?? []);
+        setActiveJobsStaleAt(null);
       })
       .catch(() => {
-        if (active) setActiveJobs([]);
+        if (!active) return;
+        const cached = loadCachedWorkerSync();
+        setActiveJobs(cached?.result.jobs ?? []);
+        setActiveJobsStaleAt(cached?.cachedAt ?? null);
       });
     return () => {
       active = false;
     };
   }, []);
 
-  const fallbackNearbyJobs = useMemo<WorkerJobSummary[]>(() => {
-    return mockJobs.map((m, idx) => ({
-      id: m.id || `worker-job-${idx + 1}`,
-      title: m.title,
-      description: m.description,
-      category: m.category,
-      priority: m.priority === "urgent" ? 3 : m.priority === "high" ? 2 : 1,
-      budget_cents: m.payment * 100,
-      currency: "INR",
-      distance_band: (idx === 0 ? "UNDER_1_KM" : idx === 1 ? "1_TO_5_KM" : "5_TO_20_KM") as WorkerJobSummary["distance_band"],
-      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
-      created_at: new Date(Date.now() - idx * 3600000).toISOString(),
-      capacity_mode: idx % 2 === 0 ? "unlimited" : "single",
-      joined_workers: idx % 2 === 0 ? 3 : 1,
-    }));
-  }, []);
-
-  const allWorkerJobs = jobs.length > 0 ? jobs : fallbackNearbyJobs;
+  const allWorkerJobs = jobs;
 
   const visibleJobs = useMemo(() => {
     return allWorkerJobs.filter((job) => {
@@ -663,6 +653,12 @@ function WorkerHome() {
                 <BriefcaseBusiness className="h-4 w-4 text-success" /> My active gigs (
                 {activeJobs.length})
               </h2>
+              {activeJobsStaleAt ? (
+                <p className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                  Offline — showing your last synced gigs from{" "}
+                  {new Date(activeJobsStaleAt).toLocaleString()}. Reconnect to refresh.
+                </p>
+              ) : null}
               {activeJobs.map((job) => (
                 <WorkerActiveJobCard key={job.id} job={job} />
               ))}

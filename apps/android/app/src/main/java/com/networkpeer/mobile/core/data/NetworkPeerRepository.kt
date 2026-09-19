@@ -125,46 +125,11 @@ class AuthRepository(
         }
     }
 
-    suspend fun getProfile(): com.networkpeer.mobile.core.model.UserProfile = try {
+    suspend fun getProfile(): com.networkpeer.mobile.core.model.UserProfile =
         apiCall { api.getProfile() }
-    } catch (_: Throwable) {
-        val current = client.sessionStore.current()
-        val role = current?.user?.role ?: UserRole.WORKER
-        val name = current?.user?.fullName?.ifBlank { "Verified User" } ?: "Verified User"
-        val phone = current?.user?.phone ?: "+919971536158"
-        val email = current?.user?.email ?: "${role.name.lowercase()}@networkpeer.io"
-        com.networkpeer.mobile.core.model.UserProfile(
-            id = current?.user?.id ?: "usr_${System.currentTimeMillis()}",
-            fullName = name,
-            email = email,
-            phoneNumber = phone,
-            mobileNumber = phone,
-            role = role,
-            eligibleRoles = listOf("collectionist", "correctionist"),
-            isVerified = true,
-            isActive = true,
-            workerProfile = com.networkpeer.mobile.core.model.WorkerProfileData(
-                skills = listOf("Retail Audit", "Indic OCR Verification", "GPS Field Survey"),
-                rating = 4.92,
-                totalJobsCompleted = 18,
-                verificationStatus = "VERIFIED",
-                preferredRadiusKm = 50,
-                isAvailable = true,
-                eligibleRoles = listOf("collectionist", "correctionist"),
-            ),
-        )
-    }
 
-    suspend fun updateProfile(body: com.networkpeer.mobile.core.model.UpdateProfileBody): com.networkpeer.mobile.core.model.UserProfile = try {
+    suspend fun updateProfile(body: com.networkpeer.mobile.core.model.UpdateProfileBody): com.networkpeer.mobile.core.model.UserProfile =
         apiCall { api.updateProfile(body) }
-    } catch (_: Throwable) {
-        val p = getProfile()
-        p.copy(
-            fullName = body.fullName ?: p.fullName,
-            mobileNumber = body.mobileNumber ?: p.mobileNumber,
-            email = body.email ?: p.email,
-        )
-    }
 }
 
 private val initialClientJobs: List<Job> = listOf(
