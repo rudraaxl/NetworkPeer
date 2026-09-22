@@ -24,7 +24,10 @@ export function resolveApiBaseUrl(): string {
   if (process.env.VITE_API_BASE_URL && !process.env.VITE_API_BASE_URL.startsWith("/")) {
     return process.env.VITE_API_BASE_URL.replace(/\/$/, "");
   }
-  return "http://networkpeer-staging-api-alb-969746120.eu-north-1.elb.amazonaws.com/api/v1";
+  // NP-18: this used to fall back to a hardcoded plaintext staging load
+  // balancer, so a misconfigured deployment silently talked to staging instead
+  // of failing. Server-side rendering needs an explicit origin.
+  return "http://127.0.0.1:3000/api/v1";
 }
 
 const apiBaseUrl = resolveApiBaseUrl();
