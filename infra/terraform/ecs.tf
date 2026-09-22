@@ -186,7 +186,10 @@ resource "aws_ecs_service" "api" {
 
   depends_on = [
     aws_ecs_cluster_capacity_providers.main,
+    # Whichever listener fronts the target group must exist before tasks
+    # register behind it. Exactly one of these two is ever created.
     aws_lb_listener.https,
+    aws_lb_listener.http_forward,
   ]
 
   lifecycle {
@@ -202,7 +205,17 @@ resource "aws_ecs_service" "api" {
 
     precondition {
       condition     = !var.allow_service_activation || local.service_activation_endpoint_ready
-      error_message = "API activation requires enable_https_listener=true and an explicit canonical domain_name."
+      error_message = "API activation requires a trusted HTTPS entrypoint: either enable_https_listener=true with an explicit canonical domain_name, or enable_cloudfront=true to use CloudFront's own certificate."
+    }
+
+    precondition {
+      condition     = !var.allow_service_activation || var.email_provider != "log"
+      error_message = "API activation requires a real email_provider. The \"log\" provider delivers nothing, so passwordless login cannot complete."
+    }
+
+    precondition {
+      condition     = !var.allow_service_activation || var.email_provider != "ses" || var.email_from != null
+      error_message = "email_provider=ses requires email_from, and that identity must already be verified in ses_region."
     }
   }
 }
@@ -238,7 +251,10 @@ resource "aws_ecs_service" "worker" {
 
   depends_on = [
     aws_ecs_cluster_capacity_providers.main,
+    # Whichever listener fronts the target group must exist before tasks
+    # register behind it. Exactly one of these two is ever created.
     aws_lb_listener.https,
+    aws_lb_listener.http_forward,
   ]
 
   lifecycle {
@@ -254,7 +270,7 @@ resource "aws_ecs_service" "worker" {
 
     precondition {
       condition     = !var.allow_service_activation || local.service_activation_endpoint_ready
-      error_message = "Worker activation requires enable_https_listener=true and an explicit canonical domain_name."
+      error_message = "Worker activation requires a trusted HTTPS entrypoint: either enable_https_listener=true with an explicit canonical domain_name, or enable_cloudfront=true to use CloudFront's own certificate."
     }
   }
 }
