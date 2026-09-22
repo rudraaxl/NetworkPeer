@@ -2518,3 +2518,308 @@ export async function getWalletSummary(userId: string): Promise<WalletSummary[]>
     lifetimeSpendCents: asCents(row["lifetime_spend_cents"]),
   }));
 }
+
+/**
+ * Correctionist review queue (NP-14/NP-16).
+ *
+ * The route that served this queue previously synthesized submissions from a
+ * job's subtasks, complete with stock photography and an `ocrResult` naming
+ * "tesseract-5.3.0" at a fixed 0.96 confidence. No OCR engine exists in this
+ * system and the schema has no column to store one, so those fields described
+ * work that never happened. This returns the real uploaded evidence instead.
+ */
+export type CorrectionistReviewRecord = {
+  id: string;
+  jobId: string;
+  subtaskId: string;
+  workerId: string;
+  mediaType: MediaType;
+  mimeType: string | null;
+  fileSizeBytes: number | null;
+  capturedAt: Date;
+  uploadedAt: Date | null;
+  status: JobSubtaskMedia["status"];
+  verificationNotes: string | null;
+  s3Bucket: string;
+  s3Key: string;
+  s3VersionId: string | null;
+};
+
+export async function listSubmissionsForCorrectionistReview(
+  jobId: string,
+): Promise<CorrectionistReviewRecord[] | null> {
+  const { rows: jobRows } = await pool.query<Row>(`SELECT id FROM jobs WHERE id = $1`, [jobId]);
+  if (!jobRows[0]) return null;
+
+  const { rows } = await pool.query<Row>(
+    `
+      SELECT
+        m.id, m.job_id, m.subtask_id, m.worker_id, m.media_type, m.mime_type,
+        m.file_size_bytes, m.captured_at, m.uploaded_at, m.status,
+        m.verification_notes, m.s3_bucket, m.s3_key, m.s3_version_id
+      FROM job_subtask_media AS m
+      WHERE m.job_id = $1
+        AND m.status = 'UPLOADED'
+        AND m.uploaded_at IS NOT NULL
+      ORDER BY m.captured_at ASC NULLS LAST, m.id ASC
+    `,
+    [jobId],
+  );
+
+  return rows.map((row) => ({
+    id: String(row["id"]),
+    jobId: String(row["job_id"]),
+    subtaskId: String(row["subtask_id"]),
+    workerId: String(row["worker_id"]),
+    mediaType: row["media_type"] as MediaType,
+    mimeType: row["mime_type"] === null ? null : String(row["mime_type"]),
+    fileSizeBytes: row["file_size_bytes"] === null ? null : Number(row["file_size_bytes"]),
+    capturedAt: row["captured_at"] as Date,
+    uploadedAt: row["uploaded_at"] === null ? null : (row["uploaded_at"] as Date),
+    status: row["status"] as JobSubtaskMedia["status"],
+    verificationNotes: row["verification_notes"] === null ? null : String(row["verification_notes"]),
+    s3Bucket: String(row["s3_bucket"]),
+    s3Key: String(row["s3_key"]),
+    s3VersionId: row["s3_version_id"] === null ? null : String(row["s3_version_id"]),
+  }));
+}
+
+/**
+ * Applies a correctionist decision to a real evidence row. Returns null when
+ * the submission does not exist or is no longer awaiting review, so a
+ * double-submitted decision cannot silently overwrite the first one.
+ */
+export async function recordCorrectionistReviewDecision(params: {
+  submissionId: string;
+  decision: "approve" | "redo" | "reject";
+  note?: string | undefined;
+}): Promise<{ id: string; status: JobSubtaskMedia["status"] } | null> {
+  const nextStatus = params.decision === "approve" ? "VERIFIED" : "REJECTED";
+  const { rows } = await pool.query<Row>(
+    `
+      UPDATE job_subtask_media
+      SET status = $2::media_status,
+          verification_notes = COALESCE(NULLIF(btrim($3), ''), verification_notes)
+      WHERE id = $1
+        AND status = 'UPLOADED'
+      RETURNING id, status
+    `,
+    [params.submissionId, nextStatus, params.note ?? ""],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { id: String(row["id"]), status: row["status"] as JobSubtaskMedia["status"] };
+}
+
+/**
+ * A worker's own recent submissions. Replaces a hardcoded two-item array of
+ * stock photos and invented OCR snippets (NP-14).
+ */
+export async function listSubmissionsForWorker(
+  workerId: string,
+  limit: number,
+): Promise<CorrectionistReviewRecord[]> {
+  const { rows } = await pool.query<Row>(
+    `
+      SELECT
+        m.id, m.job_id, m.subtask_id, m.worker_id, m.media_type, m.mime_type,
+        m.file_size_bytes, m.captured_at, m.uploaded_at, m.status,
+        m.verification_notes, m.s3_bucket, m.s3_key, m.s3_version_id
+      FROM job_subtask_media AS m
+      WHERE m.worker_id = $1
+        AND m.uploaded_at IS NOT NULL
+      ORDER BY m.uploaded_at DESC, m.id ASC
+      LIMIT $2
+    `,
+    [workerId, limit],
+  );
+  return rows.map((row) => ({
+    id: String(row["id"]),
+    jobId: String(row["job_id"]),
+    subtaskId: String(row["subtask_id"]),
+    workerId: String(row["worker_id"]),
+    mediaType: row["media_type"] as MediaType,
+    mimeType: row["mime_type"] === null ? null : String(row["mime_type"]),
+    fileSizeBytes: row["file_size_bytes"] === null ? null : Number(row["file_size_bytes"]),
+    capturedAt: row["captured_at"] as Date,
+    uploadedAt: row["uploaded_at"] === null ? null : (row["uploaded_at"] as Date),
+    status: row["status"] as JobSubtaskMedia["status"],
+    verificationNotes: row["verification_notes"] === null ? null : String(row["verification_notes"]),
+    s3Bucket: String(row["s3_bucket"]),
+    s3Key: String(row["s3_key"]),
+    s3VersionId: row["s3_version_id"] === null ? null : String(row["s3_version_id"]),
+  }));
+}
+
+/**
+ * Real review counts for a client's job (NP-14). The endpoint that served this
+ * returned a fixed object -- 300 units, 284 collected, 265 approved -- to every
+ * client for every job.
+ */
+export async function getClientJobReviewSummary(
+  jobId: string,
+  clientId: string,
+): Promise<{
+  total_units: number;
+  collected: number;
+  verified: number;
+  rejected: number;
+  awaiting_review: number;
+} | null> {
+  const { rows } = await pool.query<Row>(
+    `
+      SELECT
+        (SELECT count(*) FROM job_subtasks s WHERE s.job_id = j.id)                        AS total_units,
+        count(m.id) FILTER (WHERE m.uploaded_at IS NOT NULL)                               AS collected,
+        count(m.id) FILTER (WHERE m.status = 'VERIFIED')                                   AS verified,
+        count(m.id) FILTER (WHERE m.status = 'REJECTED')                                   AS rejected,
+        count(m.id) FILTER (WHERE m.status = 'UPLOADED')                                   AS awaiting_review
+      FROM jobs AS j
+      LEFT JOIN job_subtask_media AS m ON m.job_id = j.id
+      WHERE j.id = $1 AND j.client_id = $2
+      GROUP BY j.id
+    `,
+    [jobId, clientId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    total_units: Number(row["total_units"] ?? 0),
+    collected: Number(row["collected"] ?? 0),
+    verified: Number(row["verified"] ?? 0),
+    rejected: Number(row["rejected"] ?? 0),
+    awaiting_review: Number(row["awaiting_review"] ?? 0),
+  };
+}
+
+/* ------------------------------------------------------------------------ *
+ * Email OTP challenges and auth rate limiting (NP-08, NP-09, NP-10)
+ *
+ * Previously two in-process Maps, which made a code issued by one API task
+ * invisible to every other task and reset the rate limiter on each restart.
+ * ------------------------------------------------------------------------ */
+
+export type OtpAttemptOutcome = "NOT_FOUND" | "ALREADY_USED" | "EXPIRED" | "LOCKED" | "OK";
+
+export async function consumeAuthRateLimit(
+  scope: string,
+  subject: string,
+  maxCount: number,
+  windowSeconds: number,
+): Promise<boolean> {
+  const { rows } = await pool.query<Row>(
+    `SELECT public.consume_auth_rate_limit($1, $2, $3, $4) AS allowed`,
+    [scope, subject, maxCount, windowSeconds],
+  );
+  return rows[0]?.["allowed"] === true;
+}
+
+export async function createEmailOtpChallenge(input: {
+  challengeRef: string;
+  email: string;
+  codeHash: string;
+  expiresAt: Date;
+  role: UserRole;
+  requestedIp: string | null;
+}): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO public.email_otp_challenges
+        (challenge_ref, email, code_hash, expires_at, role, requested_ip)
+      VALUES ($1, $2, $3, $4, $5::user_role, $6)
+    `,
+    [input.challengeRef, input.email, input.codeHash, input.expiresAt, input.role, input.requestedIp],
+  );
+}
+
+export async function deleteEmailOtpChallenge(challengeRef: string): Promise<void> {
+  await pool.query(`DELETE FROM public.email_otp_challenges WHERE challenge_ref = $1`, [challengeRef]);
+}
+
+/** Most recent unconsumed, unexpired challenge for an address. */
+export async function findActiveChallengeRefByEmail(email: string): Promise<string | null> {
+  const { rows } = await pool.query<Row>(
+    `
+      SELECT challenge_ref
+      FROM public.email_otp_challenges
+      WHERE lower(email) = lower($1)
+        AND consumed_at IS NULL
+        AND expires_at > NOW()
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    [email],
+  );
+  return rows[0] ? String(rows[0]["challenge_ref"]) : null;
+}
+
+export async function registerOtpAttempt(
+  challengeRef: string,
+  maxAttempts: number,
+): Promise<{ outcome: OtpAttemptOutcome; codeHash: string | null; email: string | null; role: UserRole | null }> {
+  const { rows } = await pool.query<Row>(
+    `SELECT * FROM public.register_otp_attempt($1, $2)`,
+    [challengeRef, maxAttempts],
+  );
+  const row = rows[0];
+  if (!row) return { outcome: "NOT_FOUND", codeHash: null, email: null, role: null };
+  return {
+    outcome: String(row["outcome"]) as OtpAttemptOutcome,
+    codeHash: row["code_hash"] === null ? null : String(row["code_hash"]),
+    email: row["email"] === null ? null : String(row["email"]),
+    role: row["user_role"] === null ? null : (row["user_role"] as UserRole),
+  };
+}
+
+export async function consumeOtpChallenge(challengeRef: string): Promise<boolean> {
+  const { rows } = await pool.query<Row>(
+    `SELECT public.consume_otp_challenge($1) AS consumed`,
+    [challengeRef],
+  );
+  return rows[0]?.["consumed"] === true;
+}
+
+/* ---------------------------------------------------------------------- *
+ * Revocable refresh sessions (NP-11)
+ * ---------------------------------------------------------------------- */
+
+export type RefreshRotationOutcome = "OK" | "REUSED" | "UNKNOWN";
+
+export async function createRefreshSession(input: {
+  jti: string;
+  userId: string;
+  expiresAt: Date;
+}): Promise<void> {
+  await pool.query(
+    `INSERT INTO public.refresh_sessions (jti, user_id, expires_at) VALUES ($1, $2, $3)`,
+    [input.jti, input.userId, input.expiresAt],
+  );
+}
+
+export async function rotateRefreshSession(
+  jti: string,
+  nextJti: string,
+  expiresAt: Date,
+): Promise<RefreshRotationOutcome> {
+  const { rows } = await pool.query<Row>(
+    `SELECT public.rotate_refresh_session($1, $2, $3) AS outcome`,
+    [jti, nextJti, expiresAt],
+  );
+  return String(rows[0]?.["outcome"] ?? "UNKNOWN") as RefreshRotationOutcome;
+}
+
+export async function revokeRefreshSession(jti: string, reason: string): Promise<void> {
+  await pool.query(
+    `UPDATE public.refresh_sessions SET revoked_at = NOW(), revoked_reason = $2
+     WHERE jti = $1 AND revoked_at IS NULL`,
+    [jti, reason],
+  );
+}
+
+export async function revokeAllRefreshSessionsForUser(userId: string, reason: string): Promise<void> {
+  await pool.query(
+    `UPDATE public.refresh_sessions SET revoked_at = NOW(), revoked_reason = $2
+     WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId, reason],
+  );
+}

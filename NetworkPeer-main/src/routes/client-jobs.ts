@@ -9,6 +9,7 @@ import {
   clientEvidenceReviewService,
   type ClientEvidenceReviewItem,
 } from "../services/client-evidence-review-service.js";
+import { getClientJobReviewSummary } from "../repository.js";
 import { parseBody } from "../utils/validation.js";
 import type { Point } from "../contracts.js";
 
@@ -228,14 +229,12 @@ export default async function clientJobsRoutes(
           return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid job id"));
         }
         try {
-          const summary = {
-            totalUnits: 300,
-            collected: 284,
-            correctionistApproved: 265,
-            clientApproved: 212,
-            clientRejected: 8,
-            redoRequested: 19,
-          };
+          // NP-14: this returned the same six hardcoded numbers to every client
+          // for every job, regardless of what had actually been collected.
+          const summary = await getClientJobReviewSummary(params.data.jobId, request.auth.userId);
+          if (!summary) {
+            return reply.code(404).send(fail("JOB_NOT_FOUND", "Job not found"));
+          }
           return ok(summary);
         } catch (err) {
           return handleJobError(request, reply, err);
@@ -250,47 +249,25 @@ export default async function clientJobsRoutes(
         }
         try {
           const evidenceResult = await evidenceReviewService.listForClient(request.auth.userId, params.data.jobId);
+          // NP-14/NP-16: the real evidence below used to be wrapped in an
+          // invented OCR result, invented quality-check scores, and a review
+          // history asserting that a named correctionist had approved it. None
+          // of that happened. Only fields backed by stored data remain.
           const submissions = evidenceResult.evidence.map((item: ClientEvidenceReviewItem, idx: number) => ({
             id: item.id,
-            jobId: params.data.jobId,
-            subtaskId: item.subtask_id,
-            unitRef: `page-${String(idx + 1).padStart(3, "0")}`,
-            mediaUrl: item.download.url,
-            thumbnailUrl: item.download.url,
-            ocrResult: {
-              engineVersion: "tesseract-5.3.0",
-              text: `NetworkPeers Document Capture #${idx + 1}\nExtracted text verification passed.\nConfidence 96.5% - Edge-to-edge frame verified.`,
-              confidence: 0.965,
-              language: "en",
-              generatedAt: item.uploaded_at.toISOString(),
-            },
-            ocrStatus: "ready" as const,
-            ocrSnippet: `NetworkPeers Document Capture #${idx + 1}\nExtracted text verification passed.`,
-            status: item.status === "VERIFIED" ? ("approved" as const) : ("pending_review" as const),
-            qualityCheck: {
-              passed: true,
-              checks: {
-                edgeCoverage: { passed: true, score: 94.2 },
-                sharpness: { passed: true, score: 145.0 },
-                exposure: { passed: true, score: 2.1 },
-              },
-              overallScore: 0.97,
-              engineVersion: "np-qa-v2",
-              ranOnDevice: true,
-              checkedAt: item.captured_at.toISOString(),
-            },
-            reviewHistory: [
-              {
-                id: `rev-corr-${item.id}`,
-                submissionId: item.id,
-                reviewerRole: "correctionist" as const,
-                reviewerId: "vetted-correctionist-01",
-                decision: "approve" as const,
-                note: "Clear scan, OCR matches text accurately.",
-                createdAt: item.uploaded_at.toISOString(),
-              },
-            ],
-            submittedAt: item.uploaded_at.toISOString(),
+            job_id: params.data.jobId,
+            subtask_id: item.subtask_id,
+            unit_ref: `page-${String(idx + 1).padStart(3, "0")}`,
+            media_url: item.download.url,
+            media_expires_at: item.download.expires_at,
+            media_type: item.media_type,
+            mime_type: item.mime_type,
+            file_size_bytes: item.file_size_bytes,
+            // OCR is not implemented anywhere in this system.
+            ocr_status: "unavailable" as const,
+            status: item.status,
+            captured_at: item.captured_at,
+            submitted_at: item.uploaded_at,
           }));
           return ok({ submissions });
         } catch (err) {

@@ -1,3 +1,4 @@
+import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { config } from "../config.js";
 
 export interface SendOtpEmailParams {
@@ -8,13 +9,16 @@ export interface SendOtpEmailParams {
 }
 
 export interface EmailSendResult {
+  /** True only when a provider accepted the message for delivery. */
   success: boolean;
   messageId?: string;
-  provider: string;
+  provider: "ses" | "resend" | "log";
   error?: string;
 }
 
 export class EmailService {
+  private sesClient: SESv2Client | null = null;
+
   private formatHtml(code: string, ip?: string): string {
     return `<!DOCTYPE html>
 <html lang="en">
@@ -86,49 +90,116 @@ export class EmailService {
 </html>`;
   }
 
-  async sendOtpEmail(params: SendOtpEmailParams): Promise<EmailSendResult> {
-    const { to, code, clientIp } = params;
-    const provider = config.EMAIL_PROVIDER;
+  /**
+   * Chooses the provider. An unimplemented or unconfigured provider resolves to
+   * "log", which NP-02 makes fail closed in production rather than reporting a
+   * delivery that never happened.
+   */
+  private resolveProvider(): "ses" | "resend" | "log" {
+    if (config.EMAIL_PROVIDER === "ses") return "ses";
+    if (config.EMAIL_PROVIDER === "resend") return "resend";
+    if (config.EMAIL_PROVIDER === "log") return "log";
+    // Historical behaviour: a Resend key implies Resend when nothing is set.
+    return config.RESEND_API_KEY ? "resend" : "log";
+  }
 
-    // Resend Delivery (Mass Scale Production)
-    if (provider === "resend" || (config.RESEND_API_KEY && provider !== "log")) {
-      try {
-        const response = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${config.RESEND_API_KEY}`,
-            "Content-Type": "application/json",
+  private ses(): SESv2Client {
+    this.sesClient ??= new SESv2Client({ region: config.SES_REGION || config.AWS_REGION });
+    return this.sesClient;
+  }
+
+  private formatText(code: string, ip?: string): string {
+    return [
+      `Your NetworkPeers verification code is ${code}.`,
+      "",
+      "It expires in 10 minutes and may be used once.",
+      "Never share this code. NetworkPeers staff will never ask you for it.",
+      "",
+      `Requested${ip ? ` from IP ${ip}` : ""} on ${new Date().toUTCString()}.`,
+    ].join("\n");
+  }
+
+  private async sendViaSes(to: string, subject: string, html: string, text: string): Promise<EmailSendResult> {
+    try {
+      const result = await this.ses().send(new SendEmailCommand({
+        FromEmailAddress: config.EMAIL_FROM,
+        Destination: { ToAddresses: [to] },
+        ...(config.SES_CONFIGURATION_SET ? { ConfigurationSetName: config.SES_CONFIGURATION_SET } : {}),
+        Content: {
+          Simple: {
+            Subject: { Data: subject, Charset: "UTF-8" },
+            Body: {
+              Html: { Data: html, Charset: "UTF-8" },
+              Text: { Data: text, Charset: "UTF-8" },
+            },
           },
-          body: JSON.stringify({
-            from: config.EMAIL_FROM,
-            to: [to],
-            subject: `${code} is your NetworkPeers verification code`,
-            html: this.formatHtml(code, clientIp),
-          }),
-        });
+        },
+      }));
+      return { success: true, messageId: result.MessageId, provider: "ses" };
+    } catch (err) {
+      // A sandboxed SES identity rejects unverified recipients here. The caller
+      // surfaces the failure instead of pretending the code was delivered.
+      const name = err instanceof Error ? err.name : "UnknownError";
+      const detail = err instanceof Error ? err.message : String(err);
+      return { success: false, provider: "ses", error: `${name}: ${detail}` };
+    }
+  }
 
-        if (!response.ok) {
-          const errBody = await response.text();
-          console.error("[EmailService] Resend API error:", response.status, errBody);
-          return { success: false, provider: "resend", error: `Resend HTTP ${response.status}: ${errBody}` };
-        }
+  private async sendViaResend(to: string, subject: string, html: string): Promise<EmailSendResult> {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${config.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ from: config.EMAIL_FROM, to: [to], subject, html }),
+      });
 
-        const data = (await response.json()) as { id?: string };
-        console.log(`[EmailService] OTP email dispatched via Resend to ${to} (Message ID: ${data.id})`);
-        return { success: true, messageId: data.id, provider: "resend" };
-      } catch (err) {
-        console.error("[EmailService] Resend dispatch failure:", err);
-        return { success: false, provider: "resend", error: String(err) };
+      if (!response.ok) {
+        const errBody = await response.text();
+        return { success: false, provider: "resend", error: `Resend HTTP ${response.status}: ${errBody}` };
       }
+
+      const data = (await response.json()) as { id?: string };
+      return { success: true, messageId: data.id, provider: "resend" };
+    } catch (err) {
+      return { success: false, provider: "resend", error: String(err) };
+    }
+  }
+
+  private sendViaLog(to: string, subject: string, code: string): EmailSendResult {
+    if (config.NODE_ENV === "production") {
+      // NP-02: the log provider delivers nothing. Reporting success here is what
+      // made a broken production login look like a working one.
+      return {
+        success: false,
+        provider: "log",
+        error: "No email provider is configured. Set EMAIL_PROVIDER to ses or resend.",
+      };
     }
 
-    // Default / Log Provider (Development / Staging Simulation)
-    console.log(`\n========================================================\n[EmailService:SIMULATED] OTP EMAIL DISPATCH\nTo: ${to}\nSubject: ${code} is your NetworkPeers verification code\nCode: ${code}\nExpires: 10 minutes\n========================================================\n`);
-    return {
-      success: true,
-      provider: "log",
-      messageId: `sim_${Date.now()}`,
-    };
+    // eslint-disable-next-line no-console -- the development provider exists to print the code
+    console.log(
+      `\n${"=".repeat(56)}\n[EmailService:SIMULATED] ${subject}\nTo: ${to}\nCode: ${code}\n${"=".repeat(56)}\n`,
+    );
+    return { success: true, provider: "log", messageId: `sim_${Date.now()}` };
+  }
+
+  async sendOtpEmail(params: SendOtpEmailParams): Promise<EmailSendResult> {
+    const { to, code, clientIp } = params;
+    const subject = `${code} is your NetworkPeers verification code`;
+    const html = this.formatHtml(code, clientIp);
+    const text = this.formatText(code, clientIp);
+
+    switch (this.resolveProvider()) {
+      case "ses":
+        return this.sendViaSes(to, subject, html, text);
+      case "resend":
+        return this.sendViaResend(to, subject, html);
+      default:
+        return this.sendViaLog(to, subject, code);
+    }
   }
 }
 

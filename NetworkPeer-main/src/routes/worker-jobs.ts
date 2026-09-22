@@ -4,7 +4,15 @@ import { fail, ok } from "../contracts.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { WorkerJobServiceError, workerJobService } from "../services/worker-job-service.js";
 import { parseBody } from "../utils/validation.js";
-import { getWorkerEligibleRoles } from "../repository.js";
+import {
+  getWorkerEligibleRoles,
+  listSubmissionsForCorrectionistReview,
+  listSubmissionsForWorker,
+  recordCorrectionistReviewDecision,
+  type CorrectionistReviewRecord,
+} from "../repository.js";
+import { mediaStorage } from "../services/media-storage-service.js";
+import { config } from "../config.js";
 
 const nearbyQuerySchema = z.object({
   radius_km: z.coerce.number().finite().min(1).max(500).optional(),
@@ -111,6 +119,41 @@ export default async function workerJobsRoutes(app: FastifyInstance): Promise<vo
 
       // Revision 5 §22.3: Correctionist Review Queue
       // RELEASE BLOCKER §26 Finding 2: Server-side gating with 403 Forbidden
+      /**
+       * NP-14/NP-16: this handler used to build the queue out of a job's
+       * subtasks -- inventing submission ids, pointing every item at the same
+       * stock photograph, and attaching an `ocrResult` that named an OCR engine
+       * and a 0.96 confidence score. No OCR runs anywhere in this system and no
+       * column stores one. It now returns the evidence that was actually
+       * uploaded and is actually awaiting review, with signed, expiring URLs.
+       */
+      const presentSubmission = async (record: CorrectionistReviewRecord, expiresAt: Date) => {
+        const download = record.s3VersionId
+          ? await mediaStorage.createDownloadTarget({
+            bucket: record.s3Bucket,
+            key: record.s3Key,
+            versionId: record.s3VersionId,
+          })
+          : null;
+        return {
+          id: record.id,
+          job_id: record.jobId,
+          subtask_id: record.subtaskId,
+          worker_id: record.workerId,
+          media_type: record.mediaType,
+          mime_type: record.mimeType,
+          file_size_bytes: record.fileSizeBytes,
+          captured_at: record.capturedAt,
+          uploaded_at: record.uploadedAt,
+          status: record.status,
+          verification_notes: record.verificationNotes,
+          // OCR is not implemented. This states that plainly rather than
+          // fabricating a result the reviewer might act on.
+          ocr_status: "unavailable" as const,
+          media: download ? { url: download.url, expires_at: expiresAt } : null,
+        };
+      };
+
       const handleReviewQueue = async (request: FastifyRequest, reply: FastifyReply) => {
         const eligibleRoles = await getWorkerEligibleRoles(request.auth.userId);
         if (!eligibleRoles.includes("correctionist")) {
@@ -121,32 +164,14 @@ export default async function workerJobsRoutes(app: FastifyInstance): Promise<vo
         if (!params.success) {
           return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid job id"));
         }
+
         try {
-          // Return pending submissions with ocrResult for correctionist review
-          const detail = await workerJobService.getDetail(request.auth.userId, params.data.jobId);
-          // Return real or synthetic pending submissions matching job subtasks
-          const submissions = (detail.subtasks || []).map((subtask, idx) => ({
-            id: `sub-${subtask.id}`,
-            jobId: params.data.jobId,
-            assignmentId: `asg-${subtask.id}`,
-            workerId: "anonymized-worker",
-            subtaskId: subtask.id,
-            unitRef: `page-${String(idx + 1).padStart(3, "0")}`,
-            mediaUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
-            thumbnailUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=300&q=80",
-            ocrResult: {
-              engineVersion: "tesseract-5.3.0",
-              text: "NetworkPeers Proof of Collection\nDocument Section " + (idx + 1) + "\nVerified field capture complete. Edge-to-edge frame verified.\nTimestamp: " + new Date().toISOString(),
-              confidence: 0.96,
-              language: "en",
-              generatedAt: new Date().toISOString(),
-            },
-            ocrStatus: "ready" as const,
-            ocrSnippet: "NetworkPeers Proof of Collection\nDocument Section " + (idx + 1),
-            status: "pending_review" as const,
-            reviewHistory: [],
-            submittedAt: new Date().toISOString(),
-          }));
+          const records = await listSubmissionsForCorrectionistReview(params.data.jobId);
+          if (records === null) {
+            return reply.code(404).send(fail("JOB_NOT_FOUND", "Job not found"));
+          }
+          const expiresAt = new Date(Date.now() + config.AWS_S3_PRESIGNED_URL_EXPIRY_SECONDS * 1000);
+          const submissions = await Promise.all(records.map((record) => presentSubmission(record, expiresAt)));
           return ok({ submissions });
         } catch (err) {
           return handleWorkerJobError(request, reply, err);
@@ -172,54 +197,52 @@ export default async function workerJobsRoutes(app: FastifyInstance): Promise<vo
         if (!parsed.ok) {
           return reply.code(400).send(fail("VALIDATION_ERROR", parsed.message));
         }
-        const submissionId = (request.params as { submissionId?: string }).submissionId;
-        const reviewEvent = {
-          id: `rev-${Date.now()}`,
-          submissionId: submissionId ?? "unknown",
-          reviewerRole: "correctionist" as const,
-          reviewerId: request.auth.userId,
-          decision: parsed.value.decision,
-          note: parsed.value.note,
-          createdAt: new Date().toISOString(),
-        };
-        return ok({
-          submissionId,
-          status: parsed.value.decision === "approve" ? "approved" : "redo_requested",
-          reviewEvent,
-        });
+        // NP-14: this previously echoed the request back with a synthesized
+        // review event and persisted nothing, so every decision was lost.
+        const submissionParams = z.object({ submissionId: z.string().uuid() }).safeParse(request.params);
+        if (!submissionParams.success) {
+          return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid submission id"));
+        }
+
+        try {
+          const result = await recordCorrectionistReviewDecision({
+            submissionId: submissionParams.data.submissionId,
+            decision: parsed.value.decision,
+            note: parsed.value.note,
+          });
+          if (!result) {
+            return reply.code(409).send(fail(
+              "SUBMISSION_NOT_REVIEWABLE",
+              "Submission does not exist or is no longer awaiting review",
+            ));
+          }
+          return ok({
+            submission_id: result.id,
+            status: result.status,
+            decision: parsed.value.decision,
+            reviewer_id: request.auth.userId,
+            reviewed_at: new Date().toISOString(),
+          });
+        } catch (err) {
+          return handleWorkerJobError(request, reply, err);
+        }
       };
 
       child.post("/worker/submissions/:submissionId/review", handleSubmissionReview);
       child.post("/submissions/:submissionId/review", handleSubmissionReview);
 
-      // Revision 2 Change 6: Worker's own submissions with live OCR snippets
-      child.get("/worker/submissions/me", async (_request) => {
-        // Return recent submissions for the authenticated worker
-        const mockSubmissions = [
-          {
-            id: "sub-me-01",
-            jobId: "job-sample-01",
-            unitRef: "page-001",
-            mediaUrl: "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=1200&q=80",
-            thumbnailUrl: "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=300&q=80",
-            ocrStatus: "ready" as const,
-            ocrSnippet: "IN THE HIGH COURT OF JUSTICE\nChancery Division, Case No. 2026-NP",
-            status: "approved" as const,
-            submittedAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            id: "sub-me-02",
-            jobId: "job-sample-01",
-            unitRef: "page-002",
-            mediaUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80",
-            thumbnailUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=300&q=80",
-            ocrStatus: "processing" as const,
-            ocrSnippet: "Analyzing document text...",
-            status: "pending_review" as const,
-            submittedAt: new Date(Date.now() - 600000).toISOString(),
-          },
-        ];
-        return ok({ submissions: mockSubmissions });
+      // NP-14: this returned two hardcoded submissions with stock photo URLs and
+      // invented OCR snippets ("IN THE HIGH COURT OF JUSTICE..."). It now
+      // returns the worker's real uploads.
+      child.get("/worker/submissions/me", async (request, reply) => {
+        try {
+          const records = await listSubmissionsForWorker(request.auth.userId, 50);
+          const expiresAt = new Date(Date.now() + config.AWS_S3_PRESIGNED_URL_EXPIRY_SECONDS * 1000);
+          const submissions = await Promise.all(records.map((record) => presentSubmission(record, expiresAt)));
+          return ok({ submissions });
+        } catch (err) {
+          return handleWorkerJobError(request, reply, err);
+        }
       });
 
       // Revision 2 Change 3: Quality-Check Telemetry
