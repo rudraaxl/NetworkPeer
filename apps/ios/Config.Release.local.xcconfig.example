@@ -1,5 +1,0 @@
-// Copy to Config.Release.local.xcconfig for local Release-only public values.
-NETWORKPEER_API_BASE_URL = https://api.your-domain.example/api/v1/
-NETWORKPEER_STRIPE_PUBLISHABLE_KEY = pk_live_replace_me
-NETWORKPEER_SOCKET_IO_ENABLED = YES
-NETWORKPEER_MAX_EVIDENCE_BYTES = 26214400
