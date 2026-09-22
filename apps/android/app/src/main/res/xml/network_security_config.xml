@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NP-07: the manifest previously set android:usesCleartextTraffic="true", which
+  permitted unencrypted HTTP to any host for every build, including release. A
+  login code, a bearer token and signed evidence URLs all travelled in the clear
+  and were readable on any shared network.
+
+  This is the release posture: TLS everywhere, no exceptions.
+  src/debug/res/xml/network_security_config.xml relaxes it for local development
+  only.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

@@ -8,9 +8,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-val defaultBackendApiUrl = "http://networkpeer-staging-api-alb-969746120.eu-north-1.elb.amazonaws.com/api/v1/"
-val defaultBackendRealtimeUrl = "http://networkpeer-staging-api-alb-969746120.eu-north-1.elb.amazonaws.com"
-val defaultBackendRealtimeOrigin = "https://networkpeer-platform.vercel.app"
+// NP-18: these used to default to a decommissioned staging load balancer over
+// plaintext HTTP, and to a Vercel origin that no longer exists. A build that
+// forgets to set its own URL should point at nothing rather than silently at
+// someone else's dead infrastructure. Set these per flavour in
+// networkpeer.development.local.properties / networkpeer.production.local.properties.
+val defaultBackendApiUrl = "https://api.invalid/api/v1/"
+val defaultBackendRealtimeUrl = ""
+val defaultBackendRealtimeOrigin = ""
 val unconfiguredApiUrl = defaultBackendApiUrl
 val developmentProperties = loadLocalProperties("networkpeer.development.local.properties")
 val productionProperties = loadLocalProperties("networkpeer.production.local.properties")
@@ -63,6 +68,21 @@ fun loadLocalProperties(fileName: String): Properties {
         if (file.isFile) file.inputStream().use { input -> load(input) }
     }
 }
+
+val signingProperties = loadLocalProperties("networkpeer.signing.local.properties")
+
+fun signingProperty(name: String): String =
+    providers.gradleProperty("NETWORKPEER_SIGNING_$name").orNull
+        ?: signingProperties.getProperty(name).orEmpty()
+
+/**
+ * A release build is signable only when every credential is present. Reporting
+ * this as a flag rather than failing the configuration phase keeps
+ * `assembleDevelopmentDebug` working on a machine with no keystore.
+ */
+val releaseSigningConfigured: Boolean =
+    listOf("STORE_FILE", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD")
+        .all { signingProperty(it).isNotBlank() }
 
 fun flavorProperty(flavor: String, properties: Properties, name: String): String =
     providers.gradleProperty("NETWORKPEER_${flavor}_$name").orNull
@@ -177,6 +197,49 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // NP-21: there was no signing configuration and no buildTypes block, so a
+    // release build was signed with the shared debug key. Google Play rejects
+    // that key, so the app could never be published.
+    //
+    // Credentials come from apps/android/networkpeer.signing.local.properties,
+    // which .gitignore already excludes, or from -P gradle properties in CI.
+    // Absent those, release builds are simply left unsigned rather than
+    // silently falling back to the debug key.
+    signingConfigs {
+        create("release") {
+            val storePath = signingProperty("STORE_FILE")
+            if (storePath.isNotBlank()) {
+                storeFile = rootProject.file(storePath)
+                storePassword = signingProperty("STORE_PASSWORD")
+                keyAlias = signingProperty("KEY_ALIAS")
+                keyPassword = signingProperty("KEY_PASSWORD")
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            isMinifyEnabled = false
+        }
+
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = if (releaseSigningConfigured) {
+                signingConfigs.getByName("release")
+            } else {
+                null
+            }
+        }
     }
 }
 
