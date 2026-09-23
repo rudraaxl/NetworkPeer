@@ -100,7 +100,12 @@ jobs:
           #
           # EMAIL_PROVIDER is honoured regardless of NODE_ENV, so passwordless
           # login delivers through SES either way.
+          # Browser sign-in posts transport=browser, which the API only accepts
+          # from an allowlisted Origin. That list has to name wherever the site
+          # is actually served from, so it is managed here rather than left in
+          # whatever the last task definition happened to say.
           overrides='[
+            {"name":"CORS_ORIGINS","value":"${{ vars.APP_CORS_ORIGINS }}"},
             {"name":"EMAIL_PROVIDER","value":"ses"},
             {"name":"EMAIL_FROM","value":"${{ vars.APP_EMAIL_FROM }}"},
             {"name":"SES_REGION","value":"${{ vars.AWS_REGION }}"},
