@@ -48,11 +48,14 @@ locals {
 
   create_managed_certificate = var.domain_name != null && var.acm_certificate_arn == null
   manage_acm_dns_validation  = local.create_managed_certificate && var.route53_zone_id != null
-  certificate_arn = coalesce(
+  # No certificate exists while enable_https_listener is false, and coalesce()
+  # errors rather than returning null when every argument is null. The HTTPS
+  # listener that consumes this has count = 0 in that case, so null is correct.
+  certificate_arn = try(coalesce(
     var.acm_certificate_arn,
     try(aws_acm_certificate_validation.application[0].certificate_arn, null),
     try(aws_acm_certificate.application[0].arn, null),
-  )
+  ), null)
   # A deployment is reachable over trusted HTTPS either through its own domain
   # and certificate, or through CloudFront's own *.cloudfront.net certificate.
   # Requiring the first was NP-01: with no domain, activation could never
