@@ -19,7 +19,7 @@ terraform_lock_table_name   = "replace-with-terraform-lock-table"
 # The protected GitHub Environment must have deployment branch restrictions for
 # github_branch. AWS trusts the exact GitHub Environment subject, not a static
 # AWS access key or an unprotected workflow.
-github_repository  = "addy9087/Networkpeer"
+github_repository  = "rudraaxl/NetworkPeer"
 github_branch      = "main"
 github_environment = "staging"
 # Set github_oidc_subject only when the repository uses GitHub immutable OIDC
