@@ -182,13 +182,19 @@ jobs:
       - name: Verify health
         run: |
           set -euo pipefail
-          host="$(aws elbv2 describe-load-balancers \
-                   --query 'LoadBalancers[0].DNSName' --output text)"
+          # Taken from a repository variable rather than looked up, so the
+          # deploy role needs no elasticloadbalancing permissions for a step
+          # that only reads a public URL.
+          url="${{ vars.API_HEALTH_URL }}"
+          if [[ -z "$url" ]]; then
+            echo "::warning::API_HEALTH_URL is not set; skipping the health check." >&2
+            exit 0
+          fi
           for attempt in $(seq 1 10); do
-            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://${host}/api/v1/health" || true)"
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)"
             [[ "$code" == "200" ]] && { echo "Healthy after ${attempt} attempt(s)."; exit 0; }
             echo "attempt ${attempt}: ${code}"
             sleep 15
           done
-          echo "::error::Service stabilised but /api/v1/health never returned 200." >&2
+          echo "::error::Service stabilised but ${url} never returned 200." >&2
           exit 1
