@@ -20,6 +20,10 @@ RUN apt-get update \
 # server certificate and every connection fails with SELF_SIGNED_CERT_IN_CHAIN.
 # NODE_EXTRA_CA_CERTS appends to the default trust store, it does not replace it.
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+# ADD writes a remote file as mode 600 owned by root. The runtime image drops to
+# USER node, which then cannot read it -- and Node does not fail on that, it
+# logs "Ignoring extra certs" and carries on with an incomplete trust store.
+RUN chmod 0644 /etc/ssl/certs/rds-global-bundle.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
 
 COPY . ./
@@ -37,6 +41,10 @@ COPY --from=build --chown=node:node /app/dist ./dist
 # server certificate and every connection fails with SELF_SIGNED_CERT_IN_CHAIN.
 # NODE_EXTRA_CA_CERTS appends to the default trust store, it does not replace it.
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+# ADD writes a remote file as mode 600 owned by root. The runtime image drops to
+# USER node, which then cannot read it -- and Node does not fail on that, it
+# logs "Ignoring extra certs" and carries on with an incomplete trust store.
+RUN chmod 0644 /etc/ssl/certs/rds-global-bundle.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
 
 USER node
