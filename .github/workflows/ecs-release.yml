@@ -1,5 +1,15 @@
 name: ECS Release
 
+# A confirmed run of this workflow applies Terraform that does not describe the
+# infrastructure actually running: a plan against the live state reports 123
+# resources to add and 72 to destroy, including the RDS instance, the ECS
+# cluster and the load balancer.
+#
+# Pushes are safe -- they only ever reach the validate job. The guard below
+# blocks the confirmed manual path, which is the one that applies.
+#
+# Use `api-deploy.yml` to ship application code; it touches only ECR and ECS.
+#
 on:
   push:
     branches:
@@ -28,6 +38,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  guard:
+    name: Confirm the Terraform state matches this configuration
+    # Only the confirmed manual path applies anything, so only that path is
+    # blocked. Pushes continue to run validate as before.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirmation == 'release' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to apply while state and configuration disagree
+        run: |
+          echo "::error::ecs-release.yml would apply Terraform that does not match the live state." >&2
+          echo "A plan reports 123 to add and 72 to destroy, including the database." >&2
+          echo "Reconcile the state first, then delete this guard job." >&2
+          echo "To deploy application code, use the 'Deploy API' workflow instead." >&2
+          exit 1
+
+
   validate:
     name: Release Workflow Gate
     runs-on: ubuntu-latest
@@ -43,7 +69,7 @@ jobs:
 
   publish:
     name: Publish Immutable Images
-    needs: validate
+    needs: [validate, guard]
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'release' }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.target_environment }}
