@@ -120,6 +120,21 @@ jobs:
                     + $overrides)" \
             current.json > api-task.json
 
+          # The worker runs the same image with a different command, so it needs
+          # the same rollout. Rendering from its own definition preserves that
+          # command and its task role rather than deriving them from the API.
+          aws ecs describe-task-definition \
+            --task-definition "${{ vars.ECS_WORKER_SERVICE }}" \
+            --query 'taskDefinition' > current-worker.json
+
+          jq "$strip
+              | .containerDefinitions[0].image = \"${{ steps.build.outputs.api_image }}\"
+              | .containerDefinitions[0].environment =
+                  ((.containerDefinitions[0].environment // [])
+                    | map(select(.name as \$n | ($overrides | map(.name)) | index(\$n) | not))
+                    + $overrides)" \
+            current-worker.json > worker-task.json
+
           # The migration task reuses that definition with the migrator image.
           #
           # It runs `npm run migrate` rather than the image's default
@@ -180,9 +195,22 @@ jobs:
             --service '${{ vars.ECS_API_SERVICE }}' \
             --task-definition "$td" >/dev/null
 
-          echo "Waiting for the service to stabilise..."
+          # The background worker handles media processing and payment dispatch.
+          # Leaving it on an older image meant payments stopped settling while
+          # the API looked perfectly healthy.
+          wtd="$(aws ecs register-task-definition --cli-input-json file://worker-task.json \
+                  --query 'taskDefinition.taskDefinitionArn' --output text)"
+          echo "Registered worker: $wtd"
+
+          aws ecs update-service \
+            --cluster '${{ vars.ECS_CLUSTER }}' \
+            --service '${{ vars.ECS_WORKER_SERVICE }}' \
+            --task-definition "$wtd" >/dev/null
+
+          echo "Waiting for both services to stabilise..."
           aws ecs wait services-stable \
-            --cluster '${{ vars.ECS_CLUSTER }}' --services '${{ vars.ECS_API_SERVICE }}'
+            --cluster '${{ vars.ECS_CLUSTER }}' \
+            --services '${{ vars.ECS_API_SERVICE }}' '${{ vars.ECS_WORKER_SERVICE }}'
 
       - name: Verify health
         run: |
