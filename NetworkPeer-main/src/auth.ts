@@ -35,6 +35,12 @@ export type TokenPair = {
   refresh_token: string;
   expires_in: number;
   user: TokenUser;
+  /**
+   * NP-11: identifies the local refresh session so it can be revoked. Absent on
+   * the Cognito path, where revocation is Cognito's responsibility.
+   */
+  refresh_jti?: string;
+  refresh_expires_at?: Date;
 };
 
 export type AccessTokenVerifier = {
@@ -88,14 +94,18 @@ export function signTokenPair(user: TokenUser): TokenPair {
     .digest("base64url");
   const accessToken = `${encodedHeader}.${encodedPayload}.${signature}`;
 
+  const refreshJti = randomBytes(16).toString("hex");
+  const refreshExp = Math.floor(Date.now() / 1000) + expiresIn;
   const refreshPayload = {
     sub: user.id,
     type: "refresh",
     role: user.role,
     phone: user.phone,
-    exp: Math.floor(Date.now() / 1000) + expiresIn,
+    exp: refreshExp,
     iat: Math.floor(Date.now() / 1000),
-    nonce: randomBytes(16).toString("hex"),
+    // NP-11: this was an anonymous "nonce" that nothing recorded. As a jti it
+    // names a row in refresh_sessions, which is what makes revocation possible.
+    jti: refreshJti,
   };
   const encRefreshPayload = Buffer.from(JSON.stringify(refreshPayload)).toString("base64url");
   const refreshSignature = createHmac("sha256", config.JWT_SECRET)
@@ -108,10 +118,12 @@ export function signTokenPair(user: TokenUser): TokenPair {
     refresh_token: refreshToken,
     expires_in: 86400,
     user,
+    refresh_jti: refreshJti,
+    refresh_expires_at: new Date(refreshExp * 1000),
   };
 }
 
-export function verifyLocalRefreshToken(token: string): { sub: string; role?: UserRole; phone?: string } {
+export function verifyLocalRefreshToken(token: string): { sub: string; role?: UserRole; phone?: string; jti?: string } {
   const parts = token.split(".");
   if (parts.length !== 3) throw new AuthError("TOKEN_INVALID", "Invalid refresh token format");
   const [headerB64, payloadB64, signature] = parts;
@@ -128,7 +140,7 @@ export function verifyLocalRefreshToken(token: string): { sub: string; role?: Us
   if (payload.exp && payload.exp <= Math.floor(Date.now() / 1000)) {
     throw new AuthError("TOKEN_EXPIRED", "Refresh token has expired");
   }
-  return { sub: payload.sub, role: payload.role, phone: payload.phone };
+  return { sub: payload.sub, role: payload.role, phone: payload.phone, jti: payload.jti };
 }
 
 /** A marketplace principal must belong to exactly one trusted Cognito role group. */
@@ -164,17 +176,9 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenClaim
     throw new AuthError("TOKEN_INVALID", "Bearer token is malformed");
   }
 
-  // Demo tokens support for local dev & demo modes
-  if (token.startsWith("demo-")) {
-    const rolePart = token.includes("worker") ? "WORKER" : token.includes("admin") ? "ADMIN" : "CLIENT";
-    return {
-      sub: `demo-${rolePart.toLowerCase()}-id`,
-      exp: Math.floor(Date.now() / 1000) + 86400,
-      clientId: "demo-client",
-      username: `demo-${rolePart.toLowerCase()}`,
-      groups: [rolePart],
-    };
-  }
+  // NP-03: the "demo-" prefix used to mint a fully authenticated principal --
+  // including ADMIN -- from an attacker-supplied string. Every token now has to
+  // survive real signature verification below.
 
   // Check local HS256 JWT
   const parts = token.split(".");

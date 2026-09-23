@@ -1,5 +1,0 @@
-// Copy to Config.Debug.local.xcconfig for local Debug-only public values.
-NETWORKPEER_API_BASE_URL = https://api.your-development-domain.example/api/v1/
-NETWORKPEER_STRIPE_PUBLISHABLE_KEY = pk_test_replace_me
-NETWORKPEER_SOCKET_IO_ENABLED = NO
-NETWORKPEER_MAX_EVIDENCE_BYTES = 26214400

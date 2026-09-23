@@ -1,6 +1,0 @@
-// Safe tracked Release defaults. Add only local public values in the ignored file below.
-NETWORKPEER_API_BASE_URL =
-NETWORKPEER_STRIPE_PUBLISHABLE_KEY =
-NETWORKPEER_SOCKET_IO_ENABLED = NO
-NETWORKPEER_MAX_EVIDENCE_BYTES = 26214400
-#include? "Config.Release.local.xcconfig"

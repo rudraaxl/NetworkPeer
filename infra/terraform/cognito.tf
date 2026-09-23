@@ -69,8 +69,8 @@ resource "aws_lambda_function" "cognito_custom_auth" {
       OTP_MAX_ATTEMPTS           = tostring(var.cognito_max_attempts)
       OTP_MESSAGE_TEMPLATE       = var.cognito_sms_message_template
       OTP_TTL_MINUTES            = tostring(var.cognito_challenge_ttl_minutes)
-      OTP_SNS_ORIGINATION_NUMBER = coalesce(var.cognito_sms_origination_number, "")
-      OTP_SNS_SENDER_ID          = coalesce(var.cognito_sms_sender_id, "")
+      OTP_SNS_ORIGINATION_NUMBER = var.cognito_sms_origination_number == null ? "" : var.cognito_sms_origination_number
+      OTP_SNS_SENDER_ID          = var.cognito_sms_sender_id == null ? "" : var.cognito_sms_sender_id
     }
   }
 

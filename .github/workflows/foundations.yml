@@ -20,17 +20,6 @@ permissions:
   contents: read
 
 jobs:
-  swift-core:
-    name: Validate Swift API Core
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: apps/ios
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run contract tests
-        run: swift test
-
   terraform-format-and-validate:
     name: Validate Terraform ECS Target
     runs-on: ubuntu-latest

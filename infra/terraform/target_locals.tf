@@ -38,21 +38,45 @@ locals {
     for availability_zone in local.selected_availability_zones : aws_subnet.public[availability_zone].id
   ]
 
+  # SES accepts "Display Name <user@example.com>" as a sender, but the
+  # ses:FromAddress IAM condition key matches the bare address only.
+  ses_from_address = var.email_from == null ? null : trimspace(
+    length(regexall("<[^>]+>", var.email_from)) > 0
+    ? trim(regex("<[^>]+>", var.email_from), "<>")
+    : var.email_from
+  )
+
   create_managed_certificate = var.domain_name != null && var.acm_certificate_arn == null
   manage_acm_dns_validation  = local.create_managed_certificate && var.route53_zone_id != null
-  certificate_arn = coalesce(
+  # No certificate exists while enable_https_listener is false, and coalesce()
+  # errors rather than returning null when every argument is null. The HTTPS
+  # listener that consumes this has count = 0 in that case, so null is correct.
+  certificate_arn = try(coalesce(
     var.acm_certificate_arn,
     try(aws_acm_certificate_validation.application[0].certificate_arn, null),
     try(aws_acm_certificate.application[0].arn, null),
-  )
-  service_activation_endpoint_ready = var.enable_https_listener && (
+  ), null)
+  # A deployment is reachable over trusted HTTPS either through its own domain
+  # and certificate, or through CloudFront's own *.cloudfront.net certificate.
+  # Requiring the first was NP-01: with no domain, activation could never
+  # succeed, so every release parked production at zero and rolled back.
+  service_activation_via_domain = var.enable_https_listener && (
     var.domain_name == null ? false : length(trimspace(var.domain_name)) > 0
+  )
+  service_activation_endpoint_ready = local.service_activation_via_domain || var.enable_cloudfront
+  service_activation_endpoint_host = (
+    local.service_activation_via_domain
+    ? var.domain_name
+    : (var.enable_cloudfront ? aws_cloudfront_distribution.main[0].domain_name : null)
   )
   # ALB source ENIs live only in these public subnets. Trusting this limited
   # range permits forwarded client metadata without trusting the whole VPC.
   trusted_alb_proxy_cidrs = join(",", var.public_subnet_cidrs)
 
   runtime_secret_keys = toset([
+    # NP-04: absent from this set, the API fell back to the signing secret
+    # committed to the public repository. It is required here, not optional.
+    "JWT_SECRET",
     "DATABASE_URL",
     "DATABASE_ADMIN_URL",
     "DATABASE_MEDIA_VERIFIER_URL",
@@ -114,6 +138,12 @@ locals {
     LOG_PRETTY                        = "false"
     SENTRY_ENVIRONMENT                = var.environment
     TRUST_PROXY_CIDRS                 = local.trusted_alb_proxy_cidrs
+    # OTP delivery. The API fails closed on the "log" provider in production,
+    # so an unset provider surfaces as a 502 rather than a silent non-delivery.
+    EMAIL_PROVIDER        = var.email_provider
+    EMAIL_FROM            = coalesce(var.email_from, "")
+    SES_REGION            = coalesce(var.ses_region, var.aws_region)
+    SES_CONFIGURATION_SET = coalesce(var.ses_configuration_set, "")
   })
 
   worker_container_environment = merge(var.worker_environment_variables, {

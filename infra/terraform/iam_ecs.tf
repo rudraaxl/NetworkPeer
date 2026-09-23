@@ -133,6 +133,27 @@ data "aws_iam_policy_document" "api_task" {
   source_policy_documents = [data.aws_iam_policy_document.evidence_access.json]
 
   statement {
+    sid    = "SendOtpEmailThroughSes"
+    effect = "Allow"
+    actions = [
+      "ses:SendEmail",
+    ]
+    resources = ["*"]
+
+    # Restricts the role to the one verified sender the API is configured with,
+    # so a compromised task cannot send as an arbitrary identity.
+    dynamic "condition" {
+      for_each = var.email_from == null ? [] : [1]
+
+      content {
+        test     = "StringEquals"
+        variable = "ses:FromAddress"
+        values   = [local.ses_from_address]
+      }
+    }
+  }
+
+  statement {
     sid    = "BrokerOnlyNetworkPeerCognitoAuth"
     effect = "Allow"
     actions = [

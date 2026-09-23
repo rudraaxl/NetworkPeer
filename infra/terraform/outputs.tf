@@ -114,8 +114,8 @@ output "api_alb_dns_name" {
 }
 
 output "api_url" {
-  description = "Canonical API URL only when an explicit custom domain and HTTPS listener are configured; otherwise null."
-  value       = local.service_activation_endpoint_ready ? "https://${var.domain_name}" : null
+  description = "Canonical HTTPS URL for the API: the custom domain when one is configured, otherwise the CloudFront distribution."
+  value       = local.service_activation_endpoint_ready ? "https://${local.service_activation_endpoint_host}" : null
 }
 
 output "acm_dns_validation_records" {
@@ -163,4 +163,19 @@ output "backup_vault_name" {
 output "operations_dashboard_name" {
   description = "CloudWatch dashboard containing ALB, ECS, RDS, and Redis operating signals."
   value       = aws_cloudwatch_dashboard.main.dashboard_name
+}
+
+output "public_site_url" {
+  description = "Public HTTPS entrypoint for the client site and API. Null until enable_cloudfront is set."
+  value       = var.enable_cloudfront ? "https://${aws_cloudfront_distribution.main[0].domain_name}" : null
+}
+
+output "web_bucket_name" {
+  description = "S3 bucket the built client site is uploaded to. Null until enable_cloudfront is set."
+  value       = var.enable_cloudfront ? aws_s3_bucket.web[0].id : null
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution to invalidate after uploading a new client build."
+  value       = var.enable_cloudfront ? aws_cloudfront_distribution.main[0].id : null
 }

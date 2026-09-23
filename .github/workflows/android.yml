@@ -30,7 +30,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # setup-android installs "tools" by default, a package Google retired from
+      # the SDK. Every run since 2026-09-12 has failed in this step, before any
+      # compilation. The next step installs what the build actually needs.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
       - name: Install Android 36 build prerequisites
         run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Run development unit tests

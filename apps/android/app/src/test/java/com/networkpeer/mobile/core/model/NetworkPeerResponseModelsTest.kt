@@ -3,6 +3,7 @@ package com.networkpeer.mobile.core.model
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -79,7 +80,12 @@ class NetworkPeerResponseModelsTest {
         assertEquals("cognito-challenge", result.challengeId)
         assertEquals(600, result.expiresInSeconds)
         assertEquals(6, result.otpLength)
-        assertEquals("sms", result.delivery.transport)
-        assertEquals("+15551234567", result.delivery.to)
+        // `delivery` is nullable on the model, so assert it is present before
+        // reading it: a missing object should fail as a missing object rather
+        // than as a null-pointer somewhere further down.
+        val delivery = result.delivery
+        assertNotNull("delivery should be parsed from the response", delivery)
+        assertEquals("sms", delivery!!.transport)
+        assertEquals("+15551234567", delivery.to)
     }
 }

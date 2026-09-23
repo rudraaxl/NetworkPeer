@@ -43,21 +43,9 @@ export const requireAuth: onRequestHookHandler = async (request, reply) => {
     if (!user) {
       user = await getUserById(claims.sub);
     }
-    if (!user && claims.sub.startsWith("demo-")) {
-      user = {
-        id: claims.sub,
-        phone_number: "+919876543210",
-        email: `${tokenRole.toLowerCase()}@networkpeer.io`,
-        full_name: tokenRole === "CLIENT" ? "Demo Client" : tokenRole === "ADMIN" ? "Admin User" : "Verified Worker",
-        role: tokenRole,
-        avatar_url: null,
-        is_active: true,
-        is_verified: true,
-        last_login_at: new Date(),
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
-    }
+    // NP-03: a synthesized user with is_active/is_verified forced true used to
+    // stand in for any subject the database did not know. Principals must now
+    // correspond to a real, active, verified row.
     if (!user || !user.is_active || !user.is_verified || user.role !== tokenRole) {
       return sendAuthError(reply, new AuthError("TOKEN_INVALID", "User is not authorized"));
     }

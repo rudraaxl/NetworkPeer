@@ -100,8 +100,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import com.networkpeer.mobile.core.model.curatedWorkerJobs
-import com.networkpeer.mobile.core.model.getCuratedWorkerJobDetail
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -760,7 +758,7 @@ private fun WorkerDashboardScreen(
     val context = LocalContext.current
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var balances by remember { mutableStateOf<List<WalletBalance>>(emptyList()) }
-    var nearbyJobs by remember { mutableStateOf<List<WorkerJobSummary>>(curatedWorkerJobs) }
+    var nearbyJobs by remember { mutableStateOf<List<WorkerJobSummary>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -777,7 +775,8 @@ private fun WorkerDashboardScreen(
         } catch (f: Throwable) {
             error = friendlyError(context, f)
         } finally {
-            if (nearbyJobs.isEmpty()) nearbyJobs = curatedWorkerJobs
+            // NP-15: an empty result is an empty list, not a reason to show
+            // fabricated jobs a worker could try to accept.
             loading = false
         }
     }
@@ -2273,7 +2272,7 @@ private fun WorkerDiscoveryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isDark = isSystemInDarkTheme()
-    var jobs by remember { mutableStateOf<List<WorkerJobSummary>>(curatedWorkerJobs) }
+    var jobs by remember { mutableStateOf<List<WorkerJobSummary>>(emptyList()) }
     var balances by remember { mutableStateOf<List<WalletBalance>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("All (सभी)") }
@@ -2296,28 +2295,20 @@ private fun WorkerDiscoveryScreen(
                     reconcileSafely(container)
                 }
             } catch (_: Throwable) {}
+            // NP-15: when both calls failed this substituted a hardcoded job
+            // list, so an outage looked like available work. The failure now
+            // reaches the catch below and is shown to the worker.
             val response = try {
                 container.marketplaceRepository.allWorkerJobs(
                     page = if (reset) 1 else nextPage,
                 )
             } catch (_: Throwable) {
-                try {
-                    container.marketplaceRepository.nearbyWorkerJobs(
-                        radiusKm = null,
-                        page = if (reset) 1 else nextPage,
-                    )
-                } catch (_: Throwable) {
-                    NearbyJobsPage(
-                        items = curatedWorkerJobs,
-                        page = 1,
-                        perPage = 20,
-                        radius_km = 50,
-                        has_more = false,
-                        next_page = null,
-                    )
-                }
+                container.marketplaceRepository.nearbyWorkerJobs(
+                    radiusKm = null,
+                    page = if (reset) 1 else nextPage,
+                )
             }
-            val loadedItems = if (response.items.isEmpty()) curatedWorkerJobs else response.items
+            val loadedItems = response.items
             jobs = if (reset) loadedItems else (jobs + loadedItems).distinctBy { it.id }
             nextPage = response.next_page ?: (response.page + 1)
             hasMore = response.has_more && response.next_page != null
@@ -2328,9 +2319,8 @@ private fun WorkerDiscoveryScreen(
             }
         } catch (failure: Throwable) {
             error = friendlyError(context, failure)
-            if (jobs.isEmpty()) jobs = curatedWorkerJobs
+            if (reset) jobs = emptyList()
         } finally {
-            if (jobs.isEmpty()) jobs = curatedWorkerJobs
             loading = false
         }
     }
@@ -2340,7 +2330,7 @@ private fun WorkerDiscoveryScreen(
     }
 
     val filteredJobs = remember(jobs, searchQuery, selectedFilter) {
-        val base = if (jobs.isEmpty()) curatedWorkerJobs else jobs
+        val base = jobs
         base.filter { job ->
             val q = searchQuery.trim().lowercase()
             val matchesQuery = q.isEmpty() ||
@@ -2952,7 +2942,9 @@ private fun WorkerJobPreviewScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var detail by remember { mutableStateOf<WorkerJobDetail?>(getCuratedWorkerJobDetail(jobId)) }
+    // NP-15: seeded with a fabricated job, so the screen showed invented work
+    // before any request completed -- and kept showing it if the request failed.
+    var detail by remember { mutableStateOf<WorkerJobDetail?>(null) }
     var loading by remember { mutableStateOf(false) }
     var accepting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -2972,9 +2964,8 @@ private fun WorkerJobPreviewScreen(
             detail = container.marketplaceRepository.workerJob(jobId)
             error = null
         } catch (failure: Throwable) {
-            if (detail == null) detail = getCuratedWorkerJobDetail(jobId)
+            error = friendlyError(context, failure)
         } finally {
-            if (detail == null) detail = getCuratedWorkerJobDetail(jobId)
             loading = false
         }
     }
@@ -3345,7 +3336,9 @@ private fun WorkerTaskScreen(
     val pendingEvidence by container.durableState.pendingEvidence.collectAsState()
     val confirmedEvidence by container.durableState.confirmedEvidence.collectAsState()
     val cachedWorkerJobs by container.durableState.workerJobs.collectAsState()
-    var job by remember { mutableStateOf<WorkerJobDetail?>(getCuratedWorkerJobDetail(jobId).copy(status = JobStatus.IN_PROGRESS, is_assigned_to_requester = true)) }
+    // NP-15: seeded with a fabricated job marked IN_PROGRESS and assigned to
+    // this worker. Nothing had been assigned; the screen simply said so.
+    var job by remember { mutableStateOf<WorkerJobDetail?>(null) }
     var loading by remember { mutableStateOf(false) }
     var updating by remember { mutableStateOf(false) }
     var uploadingSubtaskId by remember { mutableStateOf<String?>(null) }
@@ -3359,9 +3352,11 @@ private fun WorkerTaskScreen(
             job = container.marketplaceRepository.workerJob(jobId)
             error = null
         } catch (failure: Throwable) {
-            job = cachedWorkerJobs.firstOrNull { it.id == jobId } ?: job ?: getCuratedWorkerJobDetail(jobId).copy(status = JobStatus.IN_PROGRESS, is_assigned_to_requester = true)
+            // The durable cache holds previously fetched real jobs, so falling
+            // back to it is honest in a way that inventing one was not.
+            job = cachedWorkerJobs.firstOrNull { it.id == jobId } ?: job
+            if (job == null) error = friendlyError(context, failure)
         } finally {
-            if (job == null) job = getCuratedWorkerJobDetail(jobId).copy(status = JobStatus.IN_PROGRESS, is_assigned_to_requester = true)
             loading = false
         }
     }

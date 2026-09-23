@@ -846,3 +846,63 @@ variable "backup_vault_lock_changeable_for_days" {
     error_message = "backup_vault_lock_changeable_for_days must be at least three."
   }
 }
+
+variable "email_provider" {
+  description = "OTP email transport. \"ses\" uses Amazon SES in ses_region. \"log\" delivers nothing and the API fails closed on it in production, so it must not be used for a live environment."
+  type        = string
+  default     = "ses"
+
+  validation {
+    condition     = contains(["ses", "resend", "log"], var.email_provider)
+    error_message = "email_provider must be ses, resend, or log."
+  }
+}
+
+variable "email_from" {
+  description = "Envelope sender for OTP email. The domain or address must be a verified SES identity in ses_region before sending succeeds."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.email_from == null || can(regex("^[^<>]*<?[^@<>]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}>?$", var.email_from))
+    error_message = "email_from must be an email address, optionally in \"Display Name <user@example.com>\" form."
+  }
+}
+
+variable "ses_region" {
+  description = "Region holding the verified SES identity. Defaults to aws_region; set it only when the identity lives elsewhere."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "ses_configuration_set" {
+  description = "Optional SES configuration set for bounce and complaint tracking."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "enable_cloudfront" {
+  description = "Serve the client site and API through a CloudFront distribution. Supplies trusted HTTPS on *.cloudfront.net without owning a domain (NP-01)."
+  type        = bool
+  default     = false
+}
+
+variable "web_bucket_name" {
+  description = "S3 bucket holding the built client site. Defaults to <project>-<environment>-web."
+  type        = string
+  default     = null
+}
+
+variable "cloudfront_price_class" {
+  description = "CloudFront edge coverage. PriceClass_100 is the cheapest and covers North America and Europe."
+  type        = string
+  default     = "PriceClass_100"
+
+  validation {
+    condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.cloudfront_price_class)
+    error_message = "cloudfront_price_class must be PriceClass_100, PriceClass_200 or PriceClass_All."
+  }
+}

@@ -1,0 +1,19 @@
+# Release signing credentials (NP-21). Copy to
+# apps/android/networkpeer.signing.local.properties, which .gitignore excludes.
+#
+# Generate the keystore yourself so the password never leaves your machine:
+#
+#   keytool -genkeypair -v \
+#     -keystore networkpeer-release.jks \
+#     -storetype PKCS12 \
+#     -keyalg RSA -keysize 4096 -validity 10000 \
+#     -alias networkpeer
+#
+# BACK THIS FILE UP. If you lose the keystore you cannot ship an update to an
+# app already on Google Play under the same listing -- there is no recovery.
+# Keep a copy somewhere durable and private, not in this repository.
+
+STORE_FILE=networkpeer-release.jks
+STORE_PASSWORD=
+KEY_ALIAS=networkpeer
+KEY_PASSWORD=

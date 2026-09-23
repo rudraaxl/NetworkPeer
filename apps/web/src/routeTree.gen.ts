@@ -28,7 +28,6 @@ import { Route as ClientIndexRouteImport } from './routes/client.index'
 import { Route as ClientNotificationsRouteImport } from './routes/client.notifications'
 import { Route as ClientProfileRouteImport } from './routes/client.profile'
 import { Route as ClientWalletRouteImport } from './routes/client.wallet'
-import { Route as DevSettleFundingRouteImport } from './routes/dev.settle-funding'
 import { Route as WorkerIndexRouteImport } from './routes/worker.index'
 import { Route as WorkerProfileRouteImport } from './routes/worker.profile'
 import { Route as WorkerWalletRouteImport } from './routes/worker.wallet'
@@ -134,11 +133,6 @@ const ClientWalletRoute = ClientWalletRouteImport.update({
   path: '/wallet',
   getParentRoute: () => ClientRoute,
 } as any)
-const DevSettleFundingRoute = DevSettleFundingRouteImport.update({
-  id: '/dev/settle-funding',
-  path: '/dev/settle-funding',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const WorkerIndexRoute = WorkerIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -202,7 +196,6 @@ export interface FileRoutesByFullPath {
   '/client/notifications': typeof ClientNotificationsRoute
   '/client/profile': typeof ClientProfileRoute
   '/client/wallet': typeof ClientWalletRoute
-  '/dev/settle-funding': typeof DevSettleFundingRoute
   '/worker/profile': typeof WorkerProfileRoute
   '/worker/wallet': typeof WorkerWalletRoute
   '/admin/': typeof AdminIndexRoute
@@ -230,7 +223,6 @@ export interface FileRoutesByTo {
   '/client/notifications': typeof ClientNotificationsRoute
   '/client/profile': typeof ClientProfileRoute
   '/client/wallet': typeof ClientWalletRoute
-  '/dev/settle-funding': typeof DevSettleFundingRoute
   '/worker/profile': typeof WorkerProfileRoute
   '/worker/wallet': typeof WorkerWalletRoute
   '/admin': typeof AdminIndexRoute
@@ -262,7 +254,6 @@ export interface FileRoutesById {
   '/client/notifications': typeof ClientNotificationsRoute
   '/client/profile': typeof ClientProfileRoute
   '/client/wallet': typeof ClientWalletRoute
-  '/dev/settle-funding': typeof DevSettleFundingRoute
   '/worker/profile': typeof WorkerProfileRoute
   '/worker/wallet': typeof WorkerWalletRoute
   '/admin/': typeof AdminIndexRoute
@@ -295,7 +286,6 @@ export interface FileRouteTypes {
     | '/client/notifications'
     | '/client/profile'
     | '/client/wallet'
-    | '/dev/settle-funding'
     | '/worker/profile'
     | '/worker/wallet'
     | '/admin/'
@@ -323,7 +313,6 @@ export interface FileRouteTypes {
     | '/client/notifications'
     | '/client/profile'
     | '/client/wallet'
-    | '/dev/settle-funding'
     | '/worker/profile'
     | '/worker/wallet'
     | '/admin'
@@ -354,7 +343,6 @@ export interface FileRouteTypes {
     | '/client/notifications'
     | '/client/profile'
     | '/client/wallet'
-    | '/dev/settle-funding'
     | '/worker/profile'
     | '/worker/wallet'
     | '/admin/'
@@ -376,7 +364,6 @@ export interface RootRouteChildren {
   WorkerRoute: typeof WorkerRouteWithChildren
   AuthAdminRoute: typeof AuthAdminRoute
   AuthVerifyRoute: typeof AuthVerifyRoute
-  DevSettleFundingRoute: typeof DevSettleFundingRoute
   AuthIndexRoute: typeof AuthIndexRoute
 }
 
@@ -514,13 +501,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/client/wallet'
       preLoaderRoute: typeof ClientWalletRouteImport
       parentRoute: typeof ClientRoute
-    }
-    '/dev/settle-funding': {
-      id: '/dev/settle-funding'
-      path: '/dev/settle-funding'
-      fullPath: '/dev/settle-funding'
-      preLoaderRoute: typeof DevSettleFundingRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/worker/': {
       id: '/worker/'
@@ -663,7 +643,6 @@ const rootRouteChildren: RootRouteChildren = {
   WorkerRoute: WorkerRouteWithChildren,
   AuthAdminRoute: AuthAdminRoute,
   AuthVerifyRoute: AuthVerifyRoute,
-  DevSettleFundingRoute: DevSettleFundingRoute,
   AuthIndexRoute: AuthIndexRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import dotenv from "dotenv";
 import { isIP } from "node:net";
+import { randomBytes } from "node:crypto";
 
 dotenv.config();
 
@@ -129,7 +130,11 @@ const envSchema = z.object({
   SENTRY_RELEASE: z.string().trim().max(200).default(""),
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
 
-  JWT_SECRET: z.string().default("networkpeer-platform-secret-2026-secure-key"),
+  // NP-04: this previously defaulted to a literal committed to a public
+  // repository, so every token it signed was forgeable. Production now refuses
+  // to boot without a real secret (enforced in the superRefine below); local
+  // development falls back to an ephemeral per-process value.
+  JWT_SECRET: z.string().default(""),
   COGNITO_USER_POOL_ID: z.string().trim().max(256).default(""),
   COGNITO_CLIENT_ID: z.string().trim().max(256).default(""),
   COGNITO_REGION: z.string().trim().min(1).max(64).default("us-east-1"),
@@ -153,7 +158,11 @@ const envSchema = z.object({
   WORKER_NEARBY_MAX_RADIUS_KM: z.coerce.number().int().min(1).max(500).default(100),
 
   // Email OTP Delivery Configuration (§12, Mass Scale Production)
-  EMAIL_PROVIDER: z.enum(["resend", "ses", "smtp", "log"]).default("log"),
+  // "smtp" was never implemented; listing it made a misconfiguration fall
+  // through to the log provider silently. Only implemented providers here.
+  EMAIL_PROVIDER: z.enum(["resend", "ses", "log"]).default("log"),
+  SES_REGION: z.string().trim().max(64).default(""),
+  SES_CONFIGURATION_SET: z.string().trim().max(128).default(""),
   EMAIL_FROM: z.string().default("NetworkPeers <auth@networkpeer.io>"),
   RESEND_API_KEY: z.string().default(""),
   AWS_SES_FROM_EMAIL: z.string().default(""),
@@ -163,6 +172,33 @@ const envSchema = z.object({
   SMTP_PASS: z.string().default(""),
   SMTP_SECURE: z.enum(["true", "false"]).default("false"),
 }).superRefine((env, ctx) => {
+  // NP-04: the signing secret is the only thing standing between a forged JWT
+  // and an authenticated session, so production refuses to start without one.
+  // The leaked literal is rejected by name because it is public and rotating
+  // away from it is the entire point of this check.
+  const LEAKED_JWT_SECRET = "networkpeer-platform-secret-2026-secure-key";
+  if (env.NODE_ENV === "production") {
+    if (!env.JWT_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["JWT_SECRET"],
+        message: "Production requires JWT_SECRET to be provisioned from a secret store",
+      });
+    } else if (env.JWT_SECRET === LEAKED_JWT_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["JWT_SECRET"],
+        message: "JWT_SECRET is the value committed to the public repository and must be rotated",
+      });
+    } else if (env.JWT_SECRET.length < 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["JWT_SECRET"],
+        message: "JWT_SECRET must be at least 32 characters",
+      });
+    }
+  }
+
   if (env.DATABASE_POOL_MIN > env.DATABASE_POOL_MAX) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -406,8 +442,14 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+// Outside production an unset JWT_SECRET becomes a random per-process value:
+// local tooling keeps working, and tokens never survive a restart -- which is
+// exactly what a development secret should do.
+const resolvedJwtSecret = parsed.data.JWT_SECRET || randomBytes(32).toString("hex");
+
 export const config = {
   ...parsed.data,
+  JWT_SECRET: resolvedJwtSecret,
   DATABASE_ADMIN_URL: parsed.data.DATABASE_ADMIN_URL ?? parsed.data.DATABASE_URL,
   DATABASE_MEDIA_VERIFIER_URL: parsed.data.DATABASE_MEDIA_VERIFIER_URL ?? parsed.data.DATABASE_URL,
   DATABASE_FINANCIAL_URL: parsed.data.DATABASE_FINANCIAL_URL ?? parsed.data.DATABASE_URL,

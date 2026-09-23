@@ -42,3 +42,7 @@ GoogleService-Info.plist
 **/*.xcuserstate
 **/xcuserdata/
 **/DerivedData/
+
+# Terraform backend config carries account-specific bucket and table names.
+backend.hcl
+!backend.hcl.example

@@ -1,5 +1,9 @@
 # Copy to networkpeer.production.local.properties. This file is ignored.
-API_BASE_URL=https://api.your-domain.example/api/v1/
+#
+# Point this at the CloudFront distribution Terraform creates -- `terraform
+# output public_site_url`. CloudFront serves both the client site and the API,
+# so the app reaches the API over HTTPS with no domain of your own.
+API_BASE_URL=https://REPLACE-ME.cloudfront.net/api/v1/
 STRIPE_PUBLISHABLE_KEY=pk_live_replace_me
-REALTIME_URL=https://api.your-domain.example
-REALTIME_ORIGIN=https://app.your-domain.example
+REALTIME_URL=https://REPLACE-ME.cloudfront.net
+REALTIME_ORIGIN=https://REPLACE-ME.cloudfront.net

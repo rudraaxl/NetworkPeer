@@ -1,0 +1,194 @@
+# Builds the API image, runs pending migrations, and rolls the ECS service.
+#
+# Deliberately does NOT run Terraform. The Terraform in this repository does not
+# match the state that describes the running stack -- a plan against it reports
+# 123 to add and 72 to destroy -- so `ecs-release.yml`, which applies
+# automatically, would take the live database and cluster with it. This workflow
+# touches only ECR and ECS, which is all the deploy role can do anyway.
+name: Deploy API
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DEPLOY to proceed'
+        required: true
+        default: ''
+      run_migrations:
+        description: 'Run pending database migrations before deploying'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: api-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, migrate, deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: inputs.confirm != 'DEPLOY'
+        run: |
+          echo "::error::Type DEPLOY in the confirm box to run this workflow." >&2
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ECS_DEPLOY_ROLE_ARN }}
+
+      - name: Log in to ECR
+        id: ecr
+        run: |
+          set -euo pipefail
+          registry="$(aws ecr get-authorization-token \
+            --query 'authorizationData[0].proxyEndpoint' --output text | sed 's#^https://##')"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "repo=${registry}/${{ vars.ECR_REPOSITORY }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push images
+        id: build
+        working-directory: NetworkPeer-main
+        run: |
+          set -euo pipefail
+          sha="${GITHUB_SHA}"
+          repo="${{ steps.ecr.outputs.repo }}"
+
+          # Only one ECR repository exists, so the migrator is distinguished by
+          # tag rather than by repository. Tags are immutable commit SHAs: a
+          # deployed image can always be traced back to its source.
+          docker build --platform linux/amd64 --target runtime  -t "${repo}:${sha}" .
+          docker build --platform linux/amd64 --target migrator -t "${repo}:migrator-${sha}" .
+          docker push "${repo}:${sha}"
+          docker push "${repo}:migrator-${sha}"
+
+          echo "api_image=${repo}:${sha}" >> "$GITHUB_OUTPUT"
+          echo "migrator_image=${repo}:migrator-${sha}" >> "$GITHUB_OUTPUT"
+
+      # The running task definition carries the database URL, Redis URL and
+      # every other runtime value. Deriving the new revisions from it means this
+      # workflow never needs to know them.
+      - name: Render task definitions
+        id: render
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${{ vars.ECS_API_SERVICE }}" \
+            --query 'taskDefinition' > current.json
+
+          # Fields the API returns but RegisterTaskDefinition rejects.
+          strip='del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                     .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)'
+
+          # NODE_ENV deliberately stays as it is. Setting it to "production"
+          # makes the API refuse to boot until several other things are true:
+          # the three database URLs must use dedicated principals rather than
+          # the migration owner (provision-app-role.sql creates those roles and
+          # has never run here), PAYMENT_GATEWAY must not be "stub", Stripe
+          # keys must be present, WEB_SESSION_COOKIE_SECURE must be true, and
+          # CORS_ORIGINS must be HTTPS-only. That is its own piece of work.
+          #
+          # EMAIL_PROVIDER is honoured regardless of NODE_ENV, so passwordless
+          # login delivers through SES either way.
+          overrides='[
+            {"name":"EMAIL_PROVIDER","value":"ses"},
+            {"name":"EMAIL_FROM","value":"${{ vars.APP_EMAIL_FROM }}"},
+            {"name":"SES_REGION","value":"${{ vars.AWS_REGION }}"},
+            {"name":"OTP_ECHO_IN_RESPONSE","value":"false"}
+          ]'
+
+          jq "$strip
+              | .containerDefinitions[0].image = \"${{ steps.build.outputs.api_image }}\"
+              | .containerDefinitions[0].environment =
+                  ((.containerDefinitions[0].environment // [])
+                    | map(select(.name as \$n | ($overrides | map(.name)) | index(\$n) | not))
+                    + $overrides)" \
+            current.json > api-task.json
+
+          # The migration task reuses that definition with the migrator image.
+          #
+          # It runs `npm run migrate` rather than the image's default
+          # migrate-and-provision.sh: that script additionally provisions four
+          # least-privilege database roles and requires five credentials this
+          # task definition does not carry. Applying schema migrations is the
+          # job here; role provisioning is a separate, deliberate step.
+          jq ".containerDefinitions[0].image = \"${{ steps.build.outputs.migrator_image }}\"
+              | .containerDefinitions[0].command = [\"npm\",\"run\",\"migrate\"]
+              | .family = (.family + \"-migrate\")" \
+            api-task.json > migrate-task.json
+
+          echo "Rendered. Image: ${{ steps.build.outputs.api_image }}"
+
+      - name: Run migrations
+        if: inputs.run_migrations
+        run: |
+          set -euo pipefail
+          td="$(aws ecs register-task-definition --cli-input-json file://migrate-task.json \
+                 --query 'taskDefinition.taskDefinitionArn' --output text)"
+
+          net="$(aws ecs describe-services \
+                  --cluster '${{ vars.ECS_CLUSTER }}' \
+                  --services '${{ vars.ECS_API_SERVICE }}' \
+                  --query 'services[0].networkConfiguration.awsvpcConfiguration' --output json)"
+          subnets="$(echo "$net" | jq -r '.subnets | join(",")')"
+          groups="$(echo "$net"  | jq -r '.securityGroups | join(",")')"
+
+          task="$(aws ecs run-task \
+            --cluster '${{ vars.ECS_CLUSTER }}' \
+            --task-definition "$td" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$groups],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)"
+
+          echo "Migration task: $task"
+          aws ecs wait tasks-stopped --cluster '${{ vars.ECS_CLUSTER }}' --tasks "$task"
+
+          code="$(aws ecs describe-tasks --cluster '${{ vars.ECS_CLUSTER }}' --tasks "$task" \
+                   --query 'tasks[0].containers[0].exitCode' --output text)"
+          echo "Migration exit code: $code"
+
+          # A failed migration must never be followed by a deploy: the new code
+          # would query a schema that does not exist yet.
+          if [[ "$code" != "0" ]]; then
+            echo "::error::Migrations failed (exit $code). Service not updated." >&2
+            exit 1
+          fi
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          td="$(aws ecs register-task-definition --cli-input-json file://api-task.json \
+                 --query 'taskDefinition.taskDefinitionArn' --output text)"
+          echo "Registered: $td"
+
+          aws ecs update-service \
+            --cluster '${{ vars.ECS_CLUSTER }}' \
+            --service '${{ vars.ECS_API_SERVICE }}' \
+            --task-definition "$td" >/dev/null
+
+          echo "Waiting for the service to stabilise..."
+          aws ecs wait services-stable \
+            --cluster '${{ vars.ECS_CLUSTER }}' --services '${{ vars.ECS_API_SERVICE }}'
+
+      - name: Verify health
+        run: |
+          set -euo pipefail
+          host="$(aws elbv2 describe-load-balancers \
+                   --query 'LoadBalancers[0].DNSName' --output text)"
+          for attempt in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://${host}/api/v1/health" || true)"
+            [[ "$code" == "200" ]] && { echo "Healthy after ${attempt} attempt(s)."; exit 0; }
+            echo "attempt ${attempt}: ${code}"
+            sleep 15
+          done
+          echo "::error::Service stabilised but /api/v1/health never returned 200." >&2
+          exit 1

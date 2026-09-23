@@ -51,6 +51,6 @@ adb shell am start -n com.networkpeer.mobile.dev/com.networkpeer.mobile.MainActi
 echo ""
 echo "========================================================"
 echo "🎉 App installed and launched successfully!"
-echo "Connected to live AWS Staging backend:"
-echo "http://networkpeer-staging-api-alb-969746120.eu-north-1.elb.amazonaws.com"
+echo "Connected to the API configured for this build:"
+echo "  see NETWORKPEER_API_BASE_URL in apps/android/networkpeer.development.local.properties"
 echo "========================================================"

@@ -4,18 +4,16 @@
   "version": "0.1.0",
   "workspaces": [
     "apps/web",
-    "apps/mobile",
     "packages/*"
   ],
   "scripts": {
-    "build": "NITRO_PRESET=vercel npm run build --workspace networkpeer-web",
+    "build": "npm run build --workspace networkpeer-web",
     "build:contracts": "npm run build --workspace @networkpeer/contracts",
-    "build:web": "NITRO_PRESET=vercel npm run build --workspace networkpeer-web",
-    "build:apps:web": "NITRO_PRESET=vercel npm run build --workspace networkpeer-web",
+    "build:web": "npm run build --workspace networkpeer-web",
+    "build:apps:web": "npm run build --workspace networkpeer-web",
     "build:android": "cd apps/android && ./gradlew assembleDevelopmentDebug",
     "lint:web": "npm run lint --workspace networkpeer-web",
     "typecheck:web": "npm run typecheck --workspace networkpeer-web",
-    "typecheck:mobile": "npm run typecheck --workspace networkpeer-mobile",
     "typecheck:api": "npm --prefix NetworkPeer-main run typecheck",
     "test:api": "npm --prefix NetworkPeer-main test",
     "check:model-leak": "./scripts/check-model-leak.sh",

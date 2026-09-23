@@ -5,7 +5,6 @@ on:
     paths:
       - "NetworkPeer-main/**"
       - "apps/web/**"
-      - "apps/mobile/**"
       - "packages/**"
       - "package.json"
       - "package-lock.json"
@@ -15,7 +14,6 @@ on:
     paths:
       - "NetworkPeer-main/**"
       - "apps/web/**"
-      - "apps/mobile/**"
       - "packages/**"
       - "package.json"
       - "package-lock.json"
@@ -126,9 +124,6 @@ jobs:
 
       - name: Type check web
         run: npm run typecheck:web
-
-      - name: Type check mobile
-        run: npm run typecheck:mobile
 
       - name: Build web
         run: npm run build
