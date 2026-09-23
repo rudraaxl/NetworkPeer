@@ -57,18 +57,25 @@ class AuthRepository(
     private val onLogout: ((String) -> Unit)? = null,
     private val deregisterDevice: (suspend (String) -> Unit)? = null,
 ) {
+    /**
+     * Requests a one-time code. The API takes only the address and the role
+     * here; the role is stored with the challenge and is what the account is
+     * created with on verify.
+     *
+     * fullName and mobileNumber remain in the signature so existing callers
+     * keep compiling, but they are not sent: the request schema rejects them,
+     * and they are only needed on verify, where a new account is created.
+     */
     suspend fun requestEmailOtp(
         email: String,
         role: UserRole,
-        fullName: String? = null,
-        mobileNumber: String? = null,
+        @Suppress("UNUSED_PARAMETER") fullName: String? = null,
+        @Suppress("UNUSED_PARAMETER") mobileNumber: String? = null,
     ): OtpRequestResult = apiCall {
         api.requestEmailOtp(
             com.networkpeer.mobile.core.network.EmailOtpRequestBody(
                 email = email,
                 role = role,
-                fullName = fullName,
-                mobileNumber = mobileNumber,
             )
         )
     }
@@ -79,7 +86,9 @@ class AuthRepository(
         challengeId: String? = null,
         fullName: String? = null,
         mobileNumber: String? = null,
-        role: UserRole = UserRole.WORKER,
+        // Accepted for source compatibility with existing callers. The role is
+        // whatever the challenge was issued with, so it is not sent on verify.
+        @Suppress("UNUSED_PARAMETER") role: UserRole = UserRole.WORKER,
     ): StoredSession {
         val pair = apiCall {
             api.verifyEmailOtp(
@@ -89,7 +98,6 @@ class AuthRepository(
                     challengeId = challengeId,
                     fullName = fullName,
                     mobileNumber = mobileNumber,
-                    role = role,
                 )
             )
         }

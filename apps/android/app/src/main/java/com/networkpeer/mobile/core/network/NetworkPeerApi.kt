@@ -202,8 +202,9 @@ interface TokenRefreshApi {
 data class EmailOtpRequestBody(
     val email: String,
     val role: UserRole,
-    @SerialName("full_name") val fullName: String? = null,
-    @SerialName("mobile_number") val mobileNumber: String? = null,
+    // full_name and mobile_number are NOT accepted here. The request schema is
+    // strict and takes only these two fields; the profile details belong on
+    // verify, where a new account is actually created.
 )
 
 @Serializable
@@ -214,7 +215,13 @@ data class EmailOtpVerifyBody(
     @SerialName("full_name") val fullName: String? = null,
     @SerialName("mobile_number") val mobileNumber: String? = null,
     val transport: String = "native",
-    val role: UserRole? = null,
+    // No role. The verify schema is strict and rejects it, so every sign-in
+    // from this app was failing with 400 before the field was removed.
+    //
+    // That rejection is correct rather than an oversight: the role is bound to
+    // the challenge when the code is issued and read from there. Letting a
+    // client assert a role at redemption would allow requesting a code as
+    // CLIENT and redeeming it as something else.
 )
 
 @Serializable
