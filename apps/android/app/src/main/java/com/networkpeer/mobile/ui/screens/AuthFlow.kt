@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -60,6 +59,9 @@ import com.networkpeer.mobile.ui.theme.Space
 import com.networkpeer.mobile.ui.theme.np
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 
 /**
  * Sign-in and registration.
@@ -120,7 +122,12 @@ fun AuthFlow(container: AppContainer) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.np.canvas),
+            .background(MaterialTheme.np.canvas)
+            // The window is edge to edge, so these screens keep themselves
+            // clear of the status bar, the navigation bar and the keyboard.
+            // The authenticated app gets this from its Scaffold; this tree has
+            // no Scaffold, which is why its back arrow sat over the clock.
+            .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         when (val current = step) {
             is AuthStep.Welcome -> WelcomeScreen(
@@ -511,7 +518,6 @@ private fun AuthScaffold(
     Column(
         Modifier
             .fillMaxSize()
-            .imePadding()
             .verticalScroll(rememberScrollState()),
     ) {
         Row(
