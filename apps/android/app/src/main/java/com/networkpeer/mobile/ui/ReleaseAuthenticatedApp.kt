@@ -39,7 +39,7 @@ import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shield
@@ -52,7 +52,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Tab
@@ -64,7 +64,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import com.networkpeer.mobile.ui.theme.BrandSkyPrimary
 import com.networkpeer.mobile.core.model.UserProfile
 import com.networkpeer.mobile.core.model.UpdateProfileBody
 import com.networkpeer.mobile.core.model.OCRResult
@@ -85,7 +84,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.networkpeer.mobile.core.evidence.QualityCheckEngine
-import com.networkpeer.mobile.core.model.SubmissionItem
 import com.networkpeer.mobile.core.model.WorkerRole
 
 import androidx.compose.material3.AlertDialog
@@ -158,18 +156,84 @@ import com.networkpeer.mobile.core.model.NearbyJobsPage
 import com.networkpeer.mobile.core.model.toWorkerJobSummary
 import com.networkpeer.mobile.core.model.WorkerJobDetail
 import com.networkpeer.mobile.core.model.WorkerJobSummary
-import com.networkpeer.mobile.ui.theme.BrandTeal
-import com.networkpeer.mobile.ui.theme.Danger
-import com.networkpeer.mobile.ui.theme.Success
 import com.stripe.android.paymentsheet.PaymentSheet
 import com.stripe.android.paymentsheet.PaymentSheetResult
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.CancellationException
+import com.networkpeer.mobile.ui.components.Tone
+import com.networkpeer.mobile.ui.theme.np
+import com.networkpeer.mobile.ui.components.NpCard
+import com.networkpeer.mobile.ui.components.NpMetric
+import com.networkpeer.mobile.ui.theme.Space
+import androidx.compose.ui.res.pluralStringResource
+import com.networkpeer.mobile.ui.components.NpEmptyState
+import com.networkpeer.mobile.ui.components.NpFilterPill
+import com.networkpeer.mobile.ui.components.NpSearchField
+import com.networkpeer.mobile.core.model.OcrStatus
+import com.networkpeer.mobile.core.model.ReviewQueueItem
+import com.networkpeer.mobile.ui.components.MoneySize
+import com.networkpeer.mobile.ui.components.NpDetailRow
+import com.networkpeer.mobile.ui.components.NpHairline
+import com.networkpeer.mobile.ui.components.NpIconAction
+import com.networkpeer.mobile.ui.components.NpLoading
+import com.networkpeer.mobile.ui.components.NpMoney
+import com.networkpeer.mobile.ui.components.NpPill
+import com.networkpeer.mobile.ui.components.NpPrimaryButton
+import com.networkpeer.mobile.ui.components.NpSecondaryButton
+import com.networkpeer.mobile.ui.components.NpSectionHeader
+import com.networkpeer.mobile.ui.components.NpStepBar
+import com.networkpeer.mobile.ui.components.NpTextAction
+import com.networkpeer.mobile.ui.components.NpTopBar
+import androidx.compose.material.icons.outlined.Info
+import com.networkpeer.mobile.ui.components.NpBanner
 
 enum class AppNavTab {
     MY_JOBS,
     DASHBOARD_PROFILE,
+}
+
+/**
+ * The discovery filters.
+ *
+ * These were a list of display strings, and the selected one was held as a
+ * String and compared with `==` against the same literal -- including
+ * "All (सभी)", so the filter's behaviour was tied to a piece of presentation
+ * text in two languages. Translating that label would have silently broken
+ * filtering. The label is now a resource and the identity is the enum.
+ */
+/**
+ * The statuses in which a worker still owes the job something, in the order
+ * the work actually happens. Anything past SUBMITTED is waiting on a reviewer
+ * or already settled, and belongs in Earnings rather than at the top of the
+ * feed. CANCELLED and DISPUTED are excluded for the same reason.
+ */
+private val ACTIVE_WORKER_STATUSES = listOf(
+    JobStatus.ASSIGNED,
+    JobStatus.EN_ROUTE,
+    JobStatus.AT_LOCATION,
+    JobStatus.IN_PROGRESS,
+    JobStatus.SUBMITTED,
+)
+
+enum class JobFilter(val label: Int) {
+    ALL(R.string.filter_all),
+    NEARBY(R.string.filter_nearby),
+    HIGH_PAY(R.string.filter_high_pay),
+    URGENT(R.string.filter_urgent),
+    ;
+
+    fun matches(job: WorkerJobSummary): Boolean = when (this) {
+        ALL -> true
+        // The four bands are fixed by the API contract (contracts.ts):
+        // UNDER_1_KM, 1_TO_5_KM, 5_TO_20_KM, 20KM_PLUS. Matching the server's
+        // own bucketing avoids re-deriving a radius on the client from a
+        // distance the client was never sent.
+        NEARBY -> job.distance_band.equals("UNDER_1_KM", true) ||
+            job.distance_band.equals("1_TO_5_KM", true)
+        HIGH_PAY -> job.budget_cents >= 50_000L
+        URGENT -> job.priority == 1
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -216,7 +280,7 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                         Icon(
                             imageVector = if (isDark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
                             contentDescription = if (isDark) "Switch to Light Mode" else "Switch to Dark Mode",
-                            tint = if (isDark) Color(0xFF38BDF8) else MaterialTheme.colorScheme.onSurface,
+                            tint = MaterialTheme.np.ink,
                         )
                     }
                     IconButton(onClick = { inboxOpen = true }) {
@@ -294,7 +358,7 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                                     Icon(
                                         imageVector = if (isDark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
                                         contentDescription = null,
-                                        tint = if (isDark) Color(0xFF38BDF8) else MaterialTheme.colorScheme.primary,
+                                        tint = MaterialTheme.np.ink,
                                     )
                                 },
                                 onClick = {
@@ -305,7 +369,7 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = { Icon(Icons.Outlined.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     userMenuOpen = false
                                     scope.launch { container.authRepository.logout() }
@@ -348,7 +412,7 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                             Icon(
                                 imageVector = Icons.Outlined.WorkOutline,
                                 contentDescription = "My Jobs",
-                                tint = if (isSelected) Color(0xFFD97706) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isSelected) MaterialTheme.np.ink else MaterialTheme.np.inkFaint,
                                 modifier = Modifier.size(24.dp),
                             )
                             Spacer(Modifier.height(4.dp))
@@ -373,9 +437,9 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                                         creatingJob = true
                                     },
                                 shape = CircleShape,
-                                color = Color(0xFFF9C933), // Canary Yellow
+                                color = MaterialTheme.np.ink, // Canary Yellow
                                 shadowElevation = 6.dp,
-                                border = BorderStroke(2.dp, Color(0xFF111827)),
+                                border = BorderStroke(2.dp, MaterialTheme.np.onInk),
                             ) {
                                 Box(
                                     modifier = Modifier.fillMaxSize(),
@@ -384,7 +448,7 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                                     Icon(
                                         imageVector = Icons.Outlined.Add,
                                         contentDescription = "Post a Job",
-                                        tint = Color(0xFF111827), // Obsidian Charcoal
+                                        tint = MaterialTheme.np.onInk, // Obsidian Charcoal
                                         modifier = Modifier.size(32.dp),
                                     )
                                 }
@@ -408,7 +472,7 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                             Icon(
                                 imageVector = Icons.Outlined.Person,
                                 contentDescription = "Dashboard / Profile",
-                                tint = if (isSelected) Color(0xFFD97706) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isSelected) MaterialTheme.np.ink else MaterialTheme.np.inkFaint,
                                 modifier = Modifier.size(24.dp),
                             )
                             Spacer(Modifier.height(4.dp))
@@ -497,6 +561,10 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                             AppNavTab.MY_JOBS -> WorkerDiscoveryScreen(
                                 container = container,
                                 onOpenJob = { workerPreviewJobId = it },
+                                // An accepted job opens the task screen. Routing
+                                // it through the preview would offer "Accept" on
+                                // a job this worker already holds.
+                                onOpenActiveJob = { workerJobId = it },
                             )
                             AppNavTab.DASHBOARD_PROFILE -> WorkerDashboardProfileScreen(
                                 container = container,
@@ -829,46 +897,32 @@ private fun WorkerDashboardScreen(
             }
         }
 
+        // This row used to show three figures, two of which were string
+        // literals: "98% reliability / Top performer" has no field behind it
+        // anywhere in the API, and the rating read "4.9" for every worker who
+        // has ever opened the app. The count fell back to 12 when the profile
+        // failed to load, so a brand new worker was told they had done twelve
+        // jobs. Only what the profile actually returns is shown now, and a
+        // rating appears at all only once one exists.
         item {
+            val workerProfile = profile?.workerProfile
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(Space.md),
             ) {
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Column(Modifier.padding(horizontal = 8.dp, vertical = 10.dp)) {
-                        Text("Reliability", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(4.dp))
-                        Text("98%", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("Top performer", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                NpCard(modifier = Modifier.weight(1f), padding = Space.md) {
+                    NpMetric(
+                        label = stringResource(R.string.metric_completed),
+                        value = "${workerProfile?.totalJobsCompleted ?: 0}",
+                    )
                 }
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Column(Modifier.padding(horizontal = 8.dp, vertical = 10.dp)) {
-                        Text("Completed", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(4.dp))
-                        Text("${profile?.workerProfile?.totalJobsCompleted ?: 12}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("Verified jobs", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Column(Modifier.padding(horizontal = 8.dp, vertical = 10.dp)) {
-                        Text("Rating", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(4.dp))
-                        Text("4.9 ★", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
-                        Text("5.0 max", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                NpCard(modifier = Modifier.weight(1f), padding = Space.md) {
+                    val rating = workerProfile?.rating ?: 0.0
+                    NpMetric(
+                        label = stringResource(R.string.metric_rating),
+                        value = if (rating > 0.0) String.format(Locale.US, "%.1f", rating) else "—",
+                        caption = if (rating > 0.0) null else stringResource(R.string.metric_rating_none),
+                    )
                 }
             }
         }
@@ -885,7 +939,7 @@ private fun WorkerDashboardScreen(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text("Find Nearby Work", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                        Text("Browse all ${nearbyJobs.size} tasks with bilingual OCR verification", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                        Text(stringResource(R.string.browse_nearby_body, nearbyJobs.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
                     }
                     Icon(Icons.Outlined.WorkOutline, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(28.dp))
                 }
@@ -924,12 +978,12 @@ private fun WorkerDashboardScreen(
             ) {
                 Column {
                     Text(
-                        text = "Live Gigs Near You (त्वरित काम)",
+                        text = stringResource(R.string.nearby_work),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "High-payout field verification tasks",
+                        text = stringResource(R.string.nearby_work_body),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -937,7 +991,7 @@ private fun WorkerDashboardScreen(
                 TextButton(onClick = onGoToJobs) {
                     Text(
                         text = "View All (${nearbyJobs.size}) >",
-                        color = Color(0xFFB45309),
+                        color = MaterialTheme.np.attention,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -989,7 +1043,7 @@ private fun ClientWalletOnlyScreen(container: AppContainer) {
             }
         }
         item { WalletCard(balances) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         if (loading) item { LoadingCard("Refreshing balance...") }
     }
 }
@@ -1033,7 +1087,7 @@ private fun WorkerWalletOnlyScreen(container: AppContainer) {
             }
         }
         item { WalletCard(balances) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         if (loading) item { LoadingCard("Refreshing balance...") }
     }
 }
@@ -1137,7 +1191,7 @@ private fun UserProfileScreen(
                     }
                 } else {
                     OutlinedButton(onClick = { onToggleEditMode(false) }) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Cancel")
                     }
@@ -1146,11 +1200,11 @@ private fun UserProfileScreen(
         }
 
         successMsg?.let { msg ->
-            item { InlineNotice(msg, Success) }
+            item { InlineNotice(msg, Tone.Positive) }
         }
 
         error?.let { err ->
-            item { InlineNotice(err, Danger) }
+            item { InlineNotice(err, Tone.Danger) }
         }
 
         if (loading) {
@@ -1169,13 +1223,13 @@ private fun UserProfileScreen(
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(RoundedCornerShape(28.dp))
-                                .background(Color(0xFFF9C933)),
+                                .background(MaterialTheme.np.ink),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = (profile?.displayName ?: (if (session.user.role == UserRole.WORKER) "W" else "C")).take(1).uppercase(),
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF111827),
+                                color = MaterialTheme.np.onInk,
                                 style = MaterialTheme.typography.headlineSmall,
                             )
                         }
@@ -1188,7 +1242,7 @@ private fun UserProfileScreen(
                                     fontWeight = FontWeight.Bold,
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Icon(Icons.Outlined.CheckCircle, contentDescription = "Verified", tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.CheckCircle, contentDescription = "Verified", tint = MaterialTheme.np.accent, modifier = Modifier.size(18.dp))
                             }
                             Text(
                                 text = if (profile?.displayPhone.isNullOrBlank()) session.user.phone else profile!!.displayPhone,
@@ -1198,7 +1252,7 @@ private fun UserProfileScreen(
                             Text(
                                 text = if (session.user.role == UserRole.WORKER) "Field Worker Account" else "Client Account",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFB45309),
+                                color = MaterialTheme.np.attention,
                             )
                         }
                     }
@@ -1208,16 +1262,16 @@ private fun UserProfileScreen(
             if (isEditMode) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = if (isSystemInDarkTheme()) Color(0xFF1E293B) else Color(0xFFFEF9C3)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.np.attentionSoft),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, if (isSystemInDarkTheme()) Color(0xFF334155) else Color(0xFFFDE047)),
+                        border = BorderStroke(1.dp, MaterialTheme.np.hairline),
                     ) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-                            Icon(Icons.Outlined.Lock, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.Lock, contentDescription = null, tint = MaterialTheme.np.attention, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(10.dp))
                             Column {
-                                Text("Identity Protection Enforced", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = if (isSystemInDarkTheme()) Color.White else Color(0xFF854D0E))
-                                Text("Full Name and Phone Number are verified credentials bound to your SMS OTP and cannot be modified.", style = MaterialTheme.typography.bodySmall, color = if (isSystemInDarkTheme()) Color(0xFFCBD5E1) else Color(0xFFA16207))
+                                Text("Identity Protection Enforced", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.np.attention)
+                                Text("Full Name and Phone Number are verified credentials bound to your SMS OTP and cannot be modified.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.np.inkMuted)
                             }
                         }
                     }
@@ -1423,7 +1477,7 @@ private fun UserProfileScreen(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
                     ) {
-                        Icon(Icons.Outlined.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.width(8.dp))
                         Text("Sign Out", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                     }
@@ -1496,7 +1550,7 @@ private fun ClientHomeScreen(
         }
         item { Text(stringResource(R.string.your_jobs), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
         if (loading && jobs.isEmpty()) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         if (!loading && error == null && jobs.isEmpty()) item {
             EmptyCard(stringResource(R.string.no_jobs_title), stringResource(R.string.no_jobs_body))
         }
@@ -1740,10 +1794,12 @@ private fun ClientCreateJobScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    // Read outside the Canvas: a DrawScope lambda is not a
+                    // composable scope, so the palette cannot be read inside it.
+                    val gridColor = MaterialTheme.np.hairline
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val stroke = 1.dp.toPx()
                         val gridSpacing = 24.dp.toPx()
-                        val gridColor = Color(0xFF64748B).copy(alpha = 0.15f)
                         var x = 0f
                         while (x < size.width) {
                             drawLine(gridColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), strokeWidth = stroke)
@@ -1761,14 +1817,14 @@ private fun ClientCreateJobScreen(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = BrandSkyPrimary.copy(alpha = 0.2f),
+                            color = MaterialTheme.np.accent.copy(alpha = 0.2f),
                             modifier = Modifier.size(52.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Outlined.LocationOn,
                                     contentDescription = "Job Location Pin",
-                                    tint = BrandSkyPrimary,
+                                    tint = MaterialTheme.np.accent,
                                     modifier = Modifier.size(30.dp),
                                 )
                             }
@@ -1791,7 +1847,7 @@ private fun ClientCreateJobScreen(
                     }
                     Surface(
                         shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 0.dp, bottomEnd = 8.dp),
-                        color = BrandSkyPrimary,
+                        color = MaterialTheme.np.accent,
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
                         Text(
@@ -1898,7 +1954,7 @@ private fun ClientCreateJobScreen(
                 Text(stringResource(R.string.add_checklist_item))
             }
         }
-        requestError?.let { item { InlineNotice(it, Danger) } }
+        requestError?.let { item { InlineNotice(it, Tone.Danger) } }
         item {
             Button(
                 onClick = {
@@ -2023,7 +2079,7 @@ private fun ClientJobDetailScreen(
     ) {
         item { BackHeader(stringResource(R.string.job_detail), onBack) }
         if (loading) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         detail?.let { loaded ->
             item {
                 Card(shape = MaterialTheme.shapes.large) {
@@ -2063,7 +2119,7 @@ private fun ClientJobDetailScreen(
                     Text(stringResource(R.string.evidence_review_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (evidenceLoading) item { LoadingCard(stringResource(R.string.loading)) }
-                evidenceError?.let { item { InlineNotice(it, Danger) } }
+                evidenceError?.let { item { InlineNotice(it, Tone.Danger) } }
                 if (!evidenceLoading && evidenceError == null && evidence.isEmpty()) item {
                     EmptyCard(stringResource(R.string.evidence_review), stringResource(R.string.no_review_evidence))
                 }
@@ -2200,7 +2256,7 @@ private fun ClientJobDetailScreen(
                     enabled = !actioning,
                 ) { Text(stringResource(R.string.dispute_job)) }
             }
-            actionNotice?.let { item { InlineNotice(it, BrandTeal) } }
+            actionNotice?.let { item { InlineNotice(it, Tone.Neutral) } }
         }
     }
     if (showCancelDialog) {
@@ -2268,6 +2324,7 @@ private fun ClientEvidenceReviewCard(item: ClientEvidenceReviewItem, onOpen: (Cl
 private fun WorkerDiscoveryScreen(
     container: AppContainer,
     onOpenJob: (String) -> Unit,
+    onOpenActiveJob: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -2275,13 +2332,26 @@ private fun WorkerDiscoveryScreen(
     var jobs by remember { mutableStateOf<List<WorkerJobSummary>>(emptyList()) }
     var balances by remember { mutableStateOf<List<WalletBalance>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("All (सभी)") }
+    var selectedFilter by remember { mutableStateOf(JobFilter.ALL) }
     var nextPage by remember { mutableStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val filterCategories = listOf("All (सभी)", "Bilingual OCR", "High Pay ₹500+", "Signage Audit", "Immediate")
+    // Jobs this worker has already accepted. They arrive as snapshot_jobs from
+    // GET /worker/sync -- every row where jobs.worker_id is this worker -- and
+    // are already kept in durable state, so this needs no extra request.
+    //
+    // They cannot appear twice: the discovery feed is built by
+    // listAllPostedJobs, whose WHERE clause includes `j.worker_id IS NULL`, so
+    // a job leaves the feed the moment it is accepted. Without this section it
+    // simply vanished, with nothing to show where it had gone.
+    val assignedJobs by container.durableState.workerJobs.collectAsState()
+    val activeJobs = remember(assignedJobs) {
+        assignedJobs
+            .filter { it.status in ACTIVE_WORKER_STATUSES }
+            .sortedBy { ACTIVE_WORKER_STATUSES.indexOf(it.status) }
+    }
 
     suspend fun loadJobs(reset: Boolean = true) {
         if (loading && !reset) return
@@ -2339,13 +2409,7 @@ private fun WorkerDiscoveryScreen(
                 job.distance_band.lowercase().contains(q) ||
                 job.category.lowercase().contains(q)
 
-            val matchesFilter = when (selectedFilter) {
-                "Bilingual OCR" -> job.title.contains("Signage", true) || job.title.contains("Devanagari", true) || job.description.contains("OCR", true)
-                "High Pay ₹500+" -> job.budget_cents >= 50000L
-                "Signage Audit" -> job.title.contains("Signage", true) || job.category.contains("AUDIT", true)
-                "Immediate" -> job.priority == 1
-                else -> true
-            }
+            val matchesFilter = selectedFilter.matches(job)
 
             matchesQuery && matchesFilter
         }
@@ -2356,171 +2420,107 @@ private fun WorkerDiscoveryScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Work in hand comes before work on offer. A worker mid-job opens this
+        // screen to continue it, not to browse -- so the accepted jobs sit at
+        // the top and the feed starts below them.
+        if (activeJobs.isNotEmpty()) {
+            item {
+                NpSectionHeader(
+                    title = stringResource(R.string.your_active_jobs),
+                    subtitle = pluralStringResource(
+                        R.plurals.jobs_in_progress,
+                        activeJobs.size,
+                        activeJobs.size,
+                    ),
+                )
+            }
+            items(activeJobs, key = { "active-${'$'}{it.id}" }) { job ->
+                ActiveJobCard(job = job, onClick = { onOpenActiveJob(job.id) })
+            }
+            item { NpHairline(Modifier.padding(vertical = Space.sm)) }
+        }
+
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.available_jobs),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${filteredJobs.size} active tasks available near you",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                IconButton(onClick = { scope.launch { loadJobs(reset = true) } }, enabled = !loading) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.refresh))
-                }
+                NpSectionHeader(
+                    modifier = Modifier.weight(1f),
+                    title = stringResource(R.string.available_jobs),
+                    subtitle = pluralStringResource(R.plurals.jobs_open, filteredJobs.size, filteredJobs.size),
+                )
+                NpIconAction(
+                    icon = Icons.Outlined.Refresh,
+                    contentDescription = stringResource(R.string.refresh),
+                    enabled = !loading,
+                    onClick = { scope.launch { loadJobs(reset = true) } },
+                )
             }
         }
 
         if (container.client.configuration.fcmConfigured) item { NotificationPermissionCard() }
         item { WalletCard(balances) }
 
-        // Search Field
         item {
-            OutlinedTextField(
+            NpSearchField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = {
-                    Text(
-                        text = "Search gigs by location, store, or payout...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = null,
-                        tint = Color(0xFFF9C933),
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFFF9C933),
-                    unfocusedBorderColor = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1),
-                )
+                placeholder = stringResource(R.string.search_jobs_hint),
             )
         }
 
-        // Filter Chips Row
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(Space.sm),
             ) {
-                filterCategories.forEach { chip ->
-                    FilterChip(
-                        selected = selectedFilter == chip,
-                        onClick = { selectedFilter = chip },
-                        label = {
-                            Text(
-                                text = chip,
-                                fontWeight = if (selectedFilter == chip) FontWeight.Bold else FontWeight.Normal,
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFFF9C933),
-                            selectedLabelColor = Color(0xFF111827),
-                        )
+                JobFilter.entries.forEach { filter ->
+                    NpFilterPill(
+                        label = stringResource(filter.label),
+                        selected = selectedFilter == filter,
+                        onClick = { selectedFilter = filter },
                     )
                 }
             }
         }
 
-        // Live Marketplace Banner
-        item {
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isDark) Color(0xFF1E293B) else Color(0xFFFEF9C3)
-                ),
-                border = BorderStroke(
-                    1.dp,
-                    if (isDark) Color(0xFF334155) else Color(0xFFFDE047)
-                )
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color(0xFFF9C933), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.WorkOutline,
-                            contentDescription = null,
-                            tint = Color(0xFF111827),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = "Live On-Demand Marketplace",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (isDark) Color.White else Color(0xFF854D0E)
-                        )
-                        Text(
-                            text = "High-priority gigs across Bengaluru · High-accuracy OCR enabled",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isDark) Color(0xFFCBD5E1) else Color(0xFFA16207)
-                        )
-                    }
-                }
-            }
-        }
+        // A "Live On-Demand Marketplace" card sat here, announcing
+        // "High-priority gigs across Bengaluru - High-accuracy OCR enabled".
+        // Neither claim came from anywhere: the job list is whatever the API
+        // returns, and OCR currently reports itself unavailable. It cost a
+        // sixth of the screen to tell the worker nothing they could act on,
+        // so the space goes to the job list instead.
 
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
 
         if (filteredJobs.isEmpty() && !loading && error == null) item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "No matching jobs found",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Try clearing your search query or selecting 'All (सभी)'",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedButton(
-                    onClick = {
+            val filtered = searchQuery.isNotBlank() || selectedFilter != JobFilter.ALL
+            NpEmptyState(
+                // Two different situations were shown the same way. "Nothing
+                // matched your filter" and "there is no work near you right
+                // now" need different words, because only one of them is
+                // something the worker can do anything about.
+                title = if (filtered) {
+                    stringResource(R.string.no_matching_jobs)
+                } else {
+                    stringResource(R.string.no_available_jobs)
+                },
+                message = if (filtered) {
+                    stringResource(R.string.no_matching_jobs_body)
+                } else {
+                    stringResource(R.string.no_available_jobs_body)
+                },
+                icon = Icons.Outlined.WorkOutline,
+                actionLabel = if (filtered) stringResource(R.string.reset_filters) else null,
+                onAction = if (filtered) {
+                    {
                         searchQuery = ""
-                        selectedFilter = "All (सभी)"
-                    },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text("Reset Filters (फ़िल्टर रीसेट करें)")
-                }
-            }
+                        selectedFilter = JobFilter.ALL
+                    }
+                } else {
+                    null
+                },
+            )
         }
 
         items(filteredJobs, key = { it.id }) { job ->
@@ -2633,193 +2633,146 @@ private fun FullScreenImageDialog(urlOrUri: String, onDismiss: () -> Unit) {
     }
 }
 
-data class OcrDialogPayload(
-    val title: String,
-    val ocrResult: OCRResult? = null,
-    val fallbackText: String = "",
+/**
+ * What the text-extraction panel has to show for one piece of evidence.
+ *
+ * [status] is required rather than inferred. The previous dialog took only an
+ * optional result and a raw-text fallback, so "no OCR has run" and "OCR ran and
+ * found nothing" rendered identically -- and every caller passed it invented
+ * text anyway.
+ */
+/** The one place `ocr_status` is turned into words a reviewer reads. */
+@Composable
+private fun ocrStatusLabel(status: OcrStatus): String = stringResource(
+    when (status) {
+        OcrStatus.READY -> R.string.ocr_status_ready
+        OcrStatus.PROCESSING -> R.string.ocr_status_processing
+        OcrStatus.FAILED -> R.string.ocr_status_failed
+        OcrStatus.UNAVAILABLE -> R.string.ocr_status_unavailable
+    },
 )
 
+data class OcrDialogPayload(
+    val title: String,
+    val status: OcrStatus,
+    val result: OCRResult? = null,
+)
+
+/**
+ * The text extracted from a photograph, or an honest account of why there
+ * isn't any.
+ *
+ * No endpoint in this system returns anything but `ocr_status: "unavailable"`
+ * today -- no OCR engine runs and no column stores a result. The READY branch
+ * is written against the real `OCRResult` contract so that the day extraction
+ * is switched on, this renders it without being touched. Until then the panel
+ * says so plainly instead of showing a transcript nobody produced.
+ */
 @Composable
-private fun FullScreenOcrDialog(
+private fun OcrEvidenceDialog(
     title: String,
-    ocrResult: OCRResult? = null,
-    rawTextFallback: String = "",
+    status: OcrStatus,
+    result: OCRResult?,
     onDismiss: () -> Unit,
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val c = MaterialTheme.np
+    val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
-    var selectedScriptTab by remember { mutableStateOf(0) }
+    val transcript = result?.text?.takeIf { it.isNotBlank() }
 
-    val rawText = (ocrResult?.text ?: rawTextFallback).ifBlank { "No OCR text extracted." }
-
-    val hindiText: String? = remember(ocrResult, rawText) {
-        val direct = ocrResult?.hindiText
-        if (!direct.isNullOrBlank()) {
-            direct
-        } else {
-            val lines = rawText.lines().filter { line -> line.any { it in '\u0900'..'\u097F' } }
-            if (lines.isNotEmpty()) lines.joinToString("\n") else null
-        }
-    }
-
-    val englishText: String? = remember(ocrResult, rawText) {
-        val direct = ocrResult?.englishText
-        if (!direct.isNullOrBlank()) {
-            direct
-        } else {
-            val lines = rawText.lines().filter { line -> line.any { it in 'a'..'z' || it in 'A'..'Z' } }
-            if (lines.isNotEmpty()) lines.joinToString("\n") else null
-        }
-    }
-
-    val currentDisplayText = when (selectedScriptTab) {
-        1 -> hindiText ?: "No Devanagari (Hindi) text recognized in this capture."
-        2 -> englishText ?: "No English (Latin) text recognized in this capture."
-        else -> rawText
-    }
-
-    val detectedBadge = ocrResult?.scriptBadge ?: when {
-        hindiText != null && englishText != null -> "Bilingual (हिन्दी + English)"
-        hindiText != null -> "हिन्दी (Hindi - Devnagri)"
-        else -> "English (Latin)"
-    }
-
-    val displayTitle = title
-        .replace("OCR — Unit Unit ", "OCR — Unit ")
-        .replace("OCR — Unit Unit", "OCR — Unit ")
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Card(
-            modifier = Modifier
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                .background(c.canvas),
         ) {
+            NpTopBar(
+                title = title,
+                onBack = onDismiss,
+                actions = {
+                    if (status == OcrStatus.READY && transcript != null) {
+                        NpTextAction(
+                            label = if (copied) {
+                                stringResource(R.string.copied)
+                            } else {
+                                stringResource(R.string.copy_text)
+                            },
+                            onClick = {
+                                clipboard.setText(AnnotatedString(transcript))
+                                copied = true
+                            },
+                        )
+                    }
+                },
+            )
+
             Column(
-                modifier = Modifier
+                Modifier
                     .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(Space.lg),
+                verticalArrangement = Arrangement.spacedBy(Space.lg),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = displayTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                when (status) {
+                    OcrStatus.UNAVAILABLE -> NpBanner(
+                        title = stringResource(R.string.ocr_unavailable_title),
+                        message = stringResource(R.string.ocr_unavailable_body),
+                        tone = Tone.Neutral,
+                        icon = Icons.Outlined.Info,
+                    )
+
+                    OcrStatus.PROCESSING -> {
+                        NpBanner(
+                            title = stringResource(R.string.ocr_processing_title),
+                            message = stringResource(R.string.ocr_processing_body),
+                            tone = Tone.Attention,
+                            icon = Icons.Outlined.Info,
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(top = 2.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                            ) {
+                        NpLoading()
+                    }
+
+                    OcrStatus.FAILED -> NpBanner(
+                        title = stringResource(R.string.ocr_failed_title),
+                        message = stringResource(R.string.ocr_failed_body),
+                        tone = Tone.Danger,
+                        icon = Icons.Outlined.Warning,
+                    )
+
+                    OcrStatus.READY -> {
+                        if (transcript == null) {
+                            // Extraction finished and found no legible text.
+                            // That is a result, and a different one from a
+                            // failure, so it gets its own words.
+                            NpBanner(
+                                title = stringResource(R.string.ocr_empty_title),
+                                message = stringResource(R.string.ocr_empty_body),
+                                tone = Tone.Neutral,
+                                icon = Icons.Outlined.Info,
+                            )
+                        } else {
+                            NpCard {
                                 Text(
-                                    text = detectedBadge,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    text = transcript,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = c.ink,
                                 )
                             }
-                        }
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close")
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val tabs = listOf("All Text (सभी)", "हिन्दी (Hindi)", "English")
-                    tabs.forEachIndexed { index, label ->
-                        val isSelected = selectedScriptTab == index
-                        Surface(
-                            onClick = { selectedScriptTab = index },
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) Color(0xFF111827) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = if (isSelected) BorderStroke(1.dp, Color(0xFFF9C933)) else null,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color(0xFFF9C933) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
+                            // Only what the server actually sent. A missing
+                            // confidence is left out rather than defaulted.
+                            result.confidence?.let { confidence ->
+                                NpDetailRow(
+                                    label = stringResource(R.string.ocr_confidence),
+                                    value = "${(confidence * 100).toInt()}%",
                                 )
                             }
+                            result.language?.let {
+                                NpDetailRow(label = stringResource(R.string.ocr_language), value = it)
+                            }
+                            result.engineVersion?.let {
+                                NpDetailRow(label = stringResource(R.string.ocr_engine), value = it)
+                            }
                         }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                        .padding(14.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Text(
-                        text = currentDisplayText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.3f,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Confidence: ${((ocrResult?.confidence ?: 0.984) * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(currentDisplayText))
-                            copied = true
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Icon(if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (copied) "Copied" else "Copy Text")
-                    }
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFF9C933),
-                            contentColor = Color(0xFF111827)
-                        )
-                    ) {
-                        Text("Close", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2828,6 +2781,82 @@ private fun FullScreenOcrDialog(
 }
 
 
+/**
+ * A job this worker has already accepted.
+ *
+ * It reads differently from a job on offer on purpose: the payout is stated
+ * quietly because the decision to take it has been made, and the thing given
+ * weight is how much of the evidence is still outstanding -- which is the only
+ * question a worker mid-job is actually asking.
+ */
+@Composable
+private fun ActiveJobCard(job: WorkerJobDetail, onClick: () -> Unit) {
+    val required = job.subtasks.filter { it.is_required }
+    val done = required.count { it.status == SubtaskStatus.COMPLETED }
+    val total = required.size
+
+    NpCard(onClick = onClick) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusPill(job.status)
+                Spacer(Modifier.weight(1f))
+                NpMoney(
+                    amount = formatMoney(job.budget_cents, job.currency),
+                    size = MoneySize.Small,
+                    color = MaterialTheme.np.inkMuted,
+                )
+            }
+
+            Text(
+                text = job.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.np.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            job.address?.takeIf { it.isNotBlank() }?.let { address ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.np.inkFaint,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(Space.xs))
+                    Text(
+                        text = address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.np.inkMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // Only shown when the job actually declares required subtasks;
+            // rendering "0 of 0 captured" would be worse than saying nothing.
+            if (total > 0) {
+                NpStepBar(steps = total, current = done)
+                Text(
+                    text = stringResource(R.string.evidence_progress, done, total),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.np.inkMuted,
+                )
+            }
+
+            NpPrimaryButton(
+                label = if (job.status == JobStatus.SUBMITTED) {
+                    stringResource(R.string.view_submission)
+                } else {
+                    stringResource(R.string.continue_job)
+                },
+                onClick = onClick,
+            )
+        }
+    }
+}
+
 @Composable
 private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
     val isDark = isSystemInDarkTheme()
@@ -2835,11 +2864,11 @@ private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isDark) Color(0xFF1E293B) else Color.White
+            containerColor = MaterialTheme.np.paper
         ),
         border = BorderStroke(
             1.dp,
-            if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
+            MaterialTheme.np.hairline
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
@@ -2860,14 +2889,14 @@ private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
-                        .background(Color(0xFFF9C933), shape = RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.np.ink, shape = RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Text(
                         text = formatMoney(job.budget_cents, job.currency),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.np.onInk
                     )
                 }
             }
@@ -2876,7 +2905,7 @@ private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .background(
-                            if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9),
+                            MaterialTheme.np.fill,
                             shape = RoundedCornerShape(6.dp)
                         )
                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -2885,13 +2914,13 @@ private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
                         text = if (job.capacity_mode == "unlimited") "Unlimited · ${job.joined_workers ?: 1} joined" else "Single spot",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
-                        color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF475569)
+                        color = MaterialTheme.np.inkMuted
                     )
                 }
                 Box(
                     modifier = Modifier
                         .background(
-                            if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9),
+                            MaterialTheme.np.fill,
                             shape = RoundedCornerShape(6.dp)
                         )
                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -2900,7 +2929,7 @@ private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
                         text = job.distance_band.replace('_', ' ').uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
-                        color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF475569)
+                        color = MaterialTheme.np.inkMuted
                     )
                 }
             }
@@ -2918,8 +2947,8 @@ private fun WorkerSummaryCard(job: WorkerJobSummary, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().height(44.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFF9C933),
-                    contentColor = Color(0xFF111827)
+                    containerColor = MaterialTheme.np.ink,
+                    contentColor = MaterialTheme.np.onInk
                 )
             ) {
                 Text(
@@ -2951,8 +2980,9 @@ private fun WorkerJobPreviewScreen(
     var selectedRole by rememberSaveable { mutableStateOf(WorkerRole.collectionist) }
 
     // Correctionist Review Queue State
-    var reviewQueue by remember { mutableStateOf<List<SubmissionItem>>(emptyList()) }
+    var reviewQueue by remember { mutableStateOf<List<ReviewQueueItem>>(emptyList()) }
     var loadingQueue by remember { mutableStateOf(false) }
+    var queueError by remember { mutableStateOf<String?>(null) }
     var queueActionInProgress by remember { mutableStateOf<String?>(null) }
     var fullScreenImageTarget by remember { mutableStateOf<String?>(null) }
     var fullScreenOcrTarget by remember { mutableStateOf<OcrDialogPayload?>(null) }
@@ -2976,10 +3006,29 @@ private fun WorkerJobPreviewScreen(
         try {
             val response = container.marketplaceRepository.workerReviewQueue(jobId)
             reviewQueue = response.submissions
+            queueError = null
         } catch (failure: Throwable) {
-            // Handled gracefully
+            // This used to be swallowed with "Handled gracefully", which meant
+            // that the decoding failure this screen hit on every single load
+            // showed up as an empty queue rather than as a problem.
+            queueError = friendlyError(context, failure)
         } finally {
             loadingQueue = false
+        }
+    }
+
+    /** Approve the evidence, or send it back to the worker to retake. */
+    fun submitReview(submissionId: String, decision: String) {
+        scope.launch {
+            queueActionInProgress = submissionId
+            try {
+                container.marketplaceRepository.reviewSubmission(submissionId, decision)
+                loadQueue()
+            } catch (failure: Throwable) {
+                queueError = friendlyError(context, failure)
+            } finally {
+                queueActionInProgress = null
+            }
         }
     }
 
@@ -2997,11 +3046,11 @@ private fun WorkerJobPreviewScreen(
         FullScreenImageDialog(urlOrUri = url, onDismiss = { fullScreenImageTarget = null })
     }
     fullScreenOcrTarget?.let { payload ->
-        FullScreenOcrDialog(
+        OcrEvidenceDialog(
             title = payload.title,
-            ocrResult = payload.ocrResult,
-            rawTextFallback = payload.fallbackText,
-            onDismiss = { fullScreenOcrTarget = null }
+            status = payload.status,
+            result = payload.result,
+            onDismiss = { fullScreenOcrTarget = null },
         )
     }
 
@@ -3012,7 +3061,7 @@ private fun WorkerJobPreviewScreen(
     ) {
         item { BackHeader(stringResource(R.string.task_preview), onBack) }
         if (loading) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         detail?.let { task ->
             item {
                 Card(shape = MaterialTheme.shapes.large) {
@@ -3141,7 +3190,7 @@ private fun WorkerJobPreviewScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                         ) {
                             Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Success, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.np.accent, modifier = Modifier.size(36.dp))
                                 Spacer(Modifier.height(8.dp))
                                 Text("Queue is clean", fontWeight = FontWeight.Bold)
                                 Text("No pending submissions awaiting correctionist review for this job.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3150,170 +3199,113 @@ private fun WorkerJobPreviewScreen(
                     }
                 } else {
                     items(reviewQueue, key = { it.id }) { submission ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        ) {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NpCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(Space.md)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        "Unit: ${submission.unitRef}",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    AssistChip(
-                                        onClick = {},
-                                        label = {
-                                            Text(
-                                                when (submission.ocrStatus) {
-                                                    "ready" -> "OCR ready"
-                                                    "processing" -> "Processing OCR..."
-                                                    else -> "OCR: ${submission.ocrStatus}"
-                                                }
-                                            )
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(R.string.evidence_item),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.np.inkFaint,
+                                        )
+                                        Text(
+                                            // The queue has no unit reference:
+                                            // the handler projects the stored
+                                            // media row, which has an id and a
+                                            // subtask, and nothing else to name
+                                            // it by.
+                                            text = submission.capturedAt?.take(10)
+                                                ?: stringResource(R.string.evidence_item),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.np.ink,
+                                        )
+                                    }
+                                    NpPill(
+                                        label = ocrStatusLabel(submission.ocrStatus),
+                                        tone = when (submission.ocrStatus) {
+                                            OcrStatus.READY -> Tone.Positive
+                                            OcrStatus.FAILED -> Tone.Danger
+                                            OcrStatus.PROCESSING -> Tone.Attention
+                                            OcrStatus.UNAVAILABLE -> Tone.Neutral
                                         },
                                     )
                                 }
 
-                                // Image preview box with expand button
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(180.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.Black),
-                                ) {
-                                    AsyncImagePreview(
-                                        urlOrUri = submission.mediaUrl,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Fit,
-                                    )
-                                    OutlinedButton(
-                                        onClick = { fullScreenImageTarget = submission.mediaUrl },
+                                // media is null when the stored row has no S3
+                                // version id, so there is nothing to sign.
+                                val mediaUrl = submission.media?.url
+                                if (mediaUrl != null) {
+                                    Box(
                                         modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(8.dp),
+                                            .fillMaxWidth()
+                                            .height(200.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.np.fill),
                                     ) {
-                                        Icon(Icons.Outlined.Fullscreen, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Expand Image")
-                                    }
-                                }
-
-                                // OCR Text Box with expand button
-                                val ocrContent = submission.ocrResult?.text ?: submission.ocrSnippet ?: "No text recognized yet"
-                                val scriptBadge = submission.ocrResult?.scriptBadge ?: when {
-                                    ocrContent.any { it in '\u0900'..'\u097F' } && ocrContent.any { it in 'a'..'z' || it in 'A'..'Z' } -> "Bilingual (हिन्दी + Eng)"
-                                    ocrContent.any { it in '\u0900'..'\u097F' } -> "हिन्दी (Hindi - Devnagri)"
-                                    else -> "English (Latin)"
-                                }
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                    shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("OCR Transcript", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                                            Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = Color(0xFFF9C933).copy(alpha = 0.25f),
-                                            ) {
-                                                Text(
-                                                    text = scriptBadge,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = Color(0xFF111827),
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                            Spacer(Modifier.width(8.dp))
-                                            OutlinedButton(
-                                                onClick = {
-                                                    val cleanUnit = if (submission.unitRef.startsWith("Unit ", ignoreCase = true)) submission.unitRef else "Unit ${submission.unitRef}"
-                                                    fullScreenOcrTarget = OcrDialogPayload(
-                                                        title = "OCR — $cleanUnit",
-                                                        ocrResult = submission.ocrResult ?: OCRResult(
-                                                            text = ocrContent,
-                                                            confidence = 0.98,
-                                                            detectedScript = if (ocrContent.any { it in '\u0900'..'\u097F' } && ocrContent.any { it in 'a'..'z' || it in 'A'..'Z' }) "bilingual"
-                                                                else if (ocrContent.any { it in '\u0900'..'\u097F' }) "hindi"
-                                                                else "english"
-                                                        ),
-                                                        fallbackText = ocrContent
-                                                    )
-                                                },
-                                            ) {
-                                                Icon(Icons.Outlined.Fullscreen, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                Spacer(Modifier.width(4.dp))
-                                                Text("View OCR", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                        Text(
-                                            ocrContent.take(160) + if (ocrContent.length > 160) "..." else "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            maxLines = 3,
+                                        AsyncImagePreview(
+                                            urlOrUri = mediaUrl,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Fit,
+                                        )
+                                        NpIconAction(
+                                            icon = Icons.Outlined.Fullscreen,
+                                            contentDescription = stringResource(R.string.expand_image),
+                                            onClick = { fullScreenImageTarget = mediaUrl },
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(Space.sm),
                                         )
                                     }
+                                } else {
+                                    NpBanner(
+                                        message = stringResource(R.string.evidence_media_missing),
+                                        tone = Tone.Attention,
+                                        icon = Icons.Outlined.Warning,
+                                    )
                                 }
 
-                                // Action Buttons (Approve / Redo)
+                                submission.verificationNotes?.takeIf { it.isNotBlank() }?.let { note ->
+                                    NpDetailRow(
+                                        label = stringResource(R.string.verification_notes),
+                                        value = note,
+                                    )
+                                }
+
+                                // Resolved here rather than inside onClick:
+                                // stringResource is @Composable and a click
+                                // lambda is not a composable scope.
+                                val extractedTextTitle = stringResource(R.string.extracted_text)
+                                NpSecondaryButton(
+                                    label = stringResource(R.string.view_extracted_text),
+                                    icon = Icons.Outlined.Fullscreen,
+                                    onClick = {
+                                        fullScreenOcrTarget = OcrDialogPayload(
+                                            title = extractedTextTitle,
+                                            status = submission.ocrStatus,
+                                            result = submission.ocrResult,
+                                        )
+                                    },
+                                )
+
                                 val isActing = queueActionInProgress == submission.id
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
                                 ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            scope.launch {
-                                                queueActionInProgress = submission.id
-                                                try {
-                                                    container.marketplaceRepository.reviewSubmission(
-                                                        submissionId = submission.id,
-                                                        decision = "redo",
-                                                        note = "Correctionist requested redo: boundary cut off or poor fidelity",
-                                                    )
-                                                    loadQueue()
-                                                } catch (f: Throwable) {
-                                                    error = friendlyError(context, f)
-                                                } finally {
-                                                    queueActionInProgress = null
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = !isActing,
-                                    ) {
-                                        Text("Redo", color = Danger)
+                                    Box(Modifier.weight(1f)) {
+                                        NpSecondaryButton(
+                                            label = stringResource(R.string.request_redo),
+                                            enabled = !isActing,
+                                            onClick = { submitReview(submission.id, "redo") },
+                                        )
                                     }
-                                    Button(
-                                        onClick = {
-                                            scope.launch {
-                                                queueActionInProgress = submission.id
-                                                try {
-                                                    container.marketplaceRepository.reviewSubmission(
-                                                        submissionId = submission.id,
-                                                        decision = "approve",
-                                                        note = "Verified by Correctionist",
-                                                    )
-                                                    loadQueue()
-                                                } catch (f: Throwable) {
-                                                    error = friendlyError(context, f)
-                                                } finally {
-                                                    queueActionInProgress = null
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = !isActing,
-                                    ) {
-                                        if (isActing) {
-                                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                                        } else {
-                                            Text("Approve")
-                                        }
+                                    Box(Modifier.weight(1f)) {
+                                        NpPrimaryButton(
+                                            label = stringResource(R.string.approve),
+                                            enabled = !isActing,
+                                            loading = isActing,
+                                            onClick = { submitReview(submission.id, "approve") },
+                                        )
                                     }
                                 }
                             }
@@ -3393,11 +3385,11 @@ private fun WorkerTaskScreen(
     var analyzingQuality by remember { mutableStateOf(false) }
 
     workerOcrTarget?.let { payload ->
-        FullScreenOcrDialog(
+        OcrEvidenceDialog(
             title = payload.title,
-            ocrResult = payload.ocrResult,
-            rawTextFallback = payload.fallbackText,
-            onDismiss = { workerOcrTarget = null }
+            status = payload.status,
+            result = payload.result,
+            onDismiss = { workerOcrTarget = null },
         )
     }
 
@@ -3426,7 +3418,7 @@ private fun WorkerTaskScreen(
     qualityRejectionReason?.let { reason ->
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Quality Check Rejected", fontWeight = FontWeight.Bold, color = Danger) },
+            title = { Text("Quality Check Rejected", fontWeight = FontWeight.Bold, color = MaterialTheme.np.danger) },
             text = { Text(reason) },
             confirmButton = {
                 Button(
@@ -3568,7 +3560,7 @@ private fun WorkerTaskScreen(
     ) {
         item { BackHeader(stringResource(R.string.live_task), onBack) }
         if (loading) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         activeJob?.let { task ->
             item {
                 Card(shape = MaterialTheme.shapes.large) {
@@ -3580,7 +3572,7 @@ private fun WorkerTaskScreen(
                         if (task.is_assigned_to_requester) {
                             Text(task.address ?: stringResource(R.string.address_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
-                            InlineNotice(stringResource(R.string.task_not_assigned), Danger)
+                            InlineNotice(stringResource(R.string.task_not_assigned), Tone.Danger)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AssistChip(
@@ -3655,58 +3647,29 @@ private fun WorkerTaskScreen(
                         subtask.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         if (confirmedForSubtask.isNotEmpty()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(stringResource(R.string.evidence_count, confirmedForSubtask.size), style = MaterialTheme.typography.bodySmall, color = Success)
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFF9C933),
-                                ) {
-                                    Text(
-                                        text = "OCR Verified (98%)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF111827),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                Text(stringResource(R.string.evidence_count, confirmedForSubtask.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.np.accent)
+                                // An "OCR Verified (98%)" badge used to sit here. The figure was a
+                                // string literal, shown beside every upload regardless of whether
+                                // OCR had run -- and the API now reports ocr_status "unavailable".
+                                // Same class of defect as NP-15: a confident claim with nothing
+                                // behind it. There is no honest number to put here yet.
                             }
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Live OCR Extraction", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                                        TextButton(
-                                            onClick = {
-                                                val sampleHindi = "नेटवर्कपीयर प्रपत्र सं. 2026 — भौतिक सत्यापन साक्ष्य प्रमाणित"
-                                                val sampleEnglish = "NetworkPeers Unit Proof — Physical verification certified"
-                                                workerOcrTarget = OcrDialogPayload(
-                                                    title = "Captured Evidence OCR — ${subtask.title}",
-                                                    ocrResult = OCRResult(
-                                                        text = "$sampleHindi\n$sampleEnglish",
-                                                        confidence = 0.984,
-                                                        detectedScript = "bilingual",
-                                                        hindiText = sampleHindi,
-                                                        englishText = sampleEnglish,
-                                                    ),
-                                                    fallbackText = "$sampleHindi\n$sampleEnglish"
-                                                )
-                                            }
-                                        ) {
-                                            Text("View OCR (Hindi / English)", style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                    Text("Verified document unit · Devanagari (हिन्दी) & English scripts recognized", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                }
-                            }
+                            // A "Live OCR Extraction" panel sat here. Tapping it opened
+                            // an OCR transcript built from two hardcoded strings --
+                            // "भौतिक सत्यापन साक्ष्य प्रमाणित" / "Physical verification
+                            // certified" -- with a confidence of 0.984 and a detected
+                            // script of "bilingual", none of which came from the photo
+                            // the worker had just taken. It read as proof that their
+                            // evidence had been machine-verified when nothing had run.
+                            // The API reports ocr_status "unavailable"; until it reports
+                            // something real there is nothing truthful to display here.
                         }
                         pendingForSubtask.forEach { pending ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     if (uploadingSubtaskId == subtask.id) stringResource(R.string.uploading_evidence) else pending.lastError ?: stringResource(R.string.uploading_evidence),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (pending.lastError == null) BrandTeal else Danger,
+                                    color = if (pending.lastError == null) MaterialTheme.np.inkMuted else MaterialTheme.np.danger,
                                 )
                                 if (pending.lastError != null && uploadingSubtaskId == null) {
                                     OutlinedButton(
@@ -3740,7 +3703,7 @@ private fun WorkerTaskScreen(
                 }
             }
             if (task.status == JobStatus.IN_PROGRESS && !pendingForJob.isEmpty()) item {
-                InlineNotice(stringResource(R.string.evidence_pending), BrandTeal)
+                InlineNotice(stringResource(R.string.evidence_pending), Tone.Neutral)
             }
             item {
                 Button(
@@ -3823,7 +3786,7 @@ private fun ActivityInboxScreen(
                 }
             }
         }
-        item { InlineNotice(stringResource(R.string.activity_body), BrandTeal) }
+        item { InlineNotice(stringResource(R.string.activity_body), Tone.Neutral) }
         if (inbox.any { it.readAt == null }) item {
             OutlinedButton(
                 onClick = {
@@ -3847,7 +3810,7 @@ private fun ActivityInboxScreen(
             }
         }
         if (refreshing && inbox.isEmpty()) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Danger) } }
+        error?.let { item { InlineNotice(it, Tone.Danger) } }
         if (!refreshing && inbox.isEmpty() && error == null) item {
             EmptyCard(stringResource(R.string.no_activity_title), stringResource(R.string.no_activity_body))
         }

@@ -119,8 +119,6 @@
     <string name="location_permission_required">Location permission is required.</string>
     <string name="available_jobs">Available Jobs</string>
     <string name="available_jobs_body">Browse available jobs posted by clients.</string>
-    <string name="nearby_work">Nearby work</string>
-    <string name="nearby_work_body">Browse available jobs near you.</string>
     <string name="location_protected">Search by location</string>
     <string name="location_protected_body">Enable location to find jobs nearby.</string>
     <string name="search">Search</string>
@@ -202,4 +200,87 @@
     <string name="auth_method_phone">SMS OTP</string>
     <string name="otp_sent_email">A verification code was sent to your email.</string>
     <string name="edit_email">Edit email</string>
+
+    <!-- Worker dashboard figures. Only values the profile actually returns. -->
+    <string name="metric_completed">Completed</string>
+    <string name="metric_rating">Rating</string>
+    <string name="metric_rating_none">No ratings yet</string>
+
+    <!-- Discovery -->
+    <string name="search_jobs_hint">Search by area, store or payout</string>
+    <string name="filter_all">All</string>
+    <string name="filter_nearby">Nearby</string>
+    <string name="filter_high_pay">Higher paying</string>
+    <string name="filter_urgent">Urgent</string>
+    <string name="no_matching_jobs">No jobs match</string>
+    <string name="no_matching_jobs_body">Nothing here fits your search and filters. Clearing them will show every job open right now.</string>
+    <string name="reset_filters">Clear search and filters</string>
+    <string name="nearby_work">Work near you</string>
+    <string name="nearby_work_body">Jobs open for anyone with your verification.</string>
+    <string name="browse_nearby_body">%1$d open right now</string>
+    <plurals name="jobs_open">
+        <item quantity="one">%1$d job open near you</item>
+        <item quantity="other">%1$d jobs open near you</item>
+    </plurals>
+
+    <!-- Welcome, sign-in and registration -->
+    <string name="welcome_headline">Get work done, or get paid to do it.</string>
+    <string name="welcome_body">NetworkPeer connects people who need field work verified with people nearby who can go and do it. Payment is held in escrow and released when the evidence is approved.</string>
+    <string name="welcome_pick_role">Get started</string>
+    <string name="role_worker_title">I want to work</string>
+    <string name="role_worker_body">Find jobs near you, photograph the evidence, get paid.</string>
+    <string name="role_client_title">I need work done</string>
+    <string name="role_client_body">Post a job, review the evidence, release the payment.</string>
+    <string name="welcome_have_account">Already registered?</string>
+    <string name="auth_create_title">Create your account</string>
+    <string name="auth_signin_title">Welcome back</string>
+    <string name="auth_email_subtitle">We’ll email you a code. No password to remember.</string>
+    <string name="auth_send_code">Email me a code</string>
+    <string name="auth_email_note">Codes expire after 10 minutes. Check your spam folder if it doesn’t arrive.</string>
+    <string name="auth_code_title">Enter your code</string>
+    <string name="auth_code_subtitle">Sent to %1$s</string>
+    <string name="auth_code_label">%1$d-digit code</string>
+    <string name="auth_development_code">Development build — your code is %1$s</string>
+    <string name="auth_create_account">Create account</string>
+    <string name="auth_sign_in_action">Sign in</string>
+    <string name="auth_resend_in">You can request a new code in %1$ds</string>
+    <string name="resend_code">Send a new code</string>
+    <string name="mobile_number_optional">Mobile number (optional)</string>
+
+    <!-- Accepted work, shown above the discovery feed -->
+    <string name="your_active_jobs">Your jobs</string>
+    <string name="evidence_progress">%1$d of %2$d required photos captured</string>
+    <string name="continue_job">Continue</string>
+    <string name="view_submission">View submission</string>
+    <plurals name="jobs_in_progress">
+        <item quantity="one">%1$d job in progress</item>
+        <item quantity="other">%1$d jobs in progress</item>
+    </plurals>
+
+    <!-- Evidence review and text extraction -->
+    <string name="ocr_status_ready">Text ready</string>
+    <string name="ocr_status_processing">Reading text</string>
+    <string name="ocr_status_failed">Text failed</string>
+    <string name="ocr_status_unavailable">No text</string>
+    <string name="ocr_unavailable_title">Text extraction is not running yet</string>
+    <string name="ocr_unavailable_body">No text has been read from this photograph. Review the image itself — the extraction service is not part of the platform yet, and the API reports it as unavailable.</string>
+    <string name="ocr_processing_title">Reading the text</string>
+    <string name="ocr_processing_body">This photograph is being processed. Check back shortly.</string>
+    <string name="ocr_failed_title">Text could not be read</string>
+    <string name="ocr_failed_body">Extraction ran on this photograph and did not finish. Review the image directly.</string>
+    <string name="ocr_empty_title">No legible text found</string>
+    <string name="ocr_empty_body">Extraction finished but found nothing readable in this photograph.</string>
+    <string name="ocr_confidence">Confidence</string>
+    <string name="ocr_language">Language</string>
+    <string name="ocr_engine">Engine</string>
+    <string name="extracted_text">Extracted text</string>
+    <string name="view_extracted_text">View extracted text</string>
+    <string name="evidence_item">Evidence</string>
+    <string name="evidence_media_missing">This evidence has no stored file to display.</string>
+    <string name="verification_notes">Notes</string>
+    <string name="expand_image">Expand image</string>
+    <string name="request_redo">Request redo</string>
+    <string name="approve">Approve</string>
+    <string name="copy_text">Copy</string>
+    <string name="copied">Copied</string>
 </resources>
