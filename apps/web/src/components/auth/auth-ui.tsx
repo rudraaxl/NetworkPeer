@@ -21,14 +21,17 @@ export function AuthLayout({
   return (
     <div className="auth-portal-root grid min-h-screen lg:grid-cols-[1fr_1.05fr] text-base">
       <div className="relative hidden overflow-hidden border-r border-border bg-card lg:block">
-        <div className="surface-grid absolute inset-0 opacity-50" aria-hidden />
+        <div className="auth-grid-pattern absolute inset-0" aria-hidden />
         <div className="absolute inset-0 bg-[var(--gradient-surface)]" aria-hidden />
         <div className="relative flex h-full flex-col justify-between p-10">
           <Link to="/" className="flex items-center gap-2.5">
             <span className="gradient-brand grid h-10 w-10 place-items-center rounded-xl text-lg font-bold text-primary-foreground">
               N
             </span>
-            <span className="text-xl font-semibold">NetworkPeers</span>
+            <span className="text-xl font-extrabold tracking-tight">
+              <span className="text-foreground">Network</span>
+              <span className="text-gradient-brand">Peers</span>
+            </span>
           </Link>
 
           <div className="animate-rise max-w-md">
