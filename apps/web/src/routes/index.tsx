@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   MapPin,
   ShieldCheck,
-  Smartphone,
   Wallet,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -45,12 +44,9 @@ const portals = [
     to: "/client",
     icon: LayoutDashboard,
   },
-  {
-    title: "Worker app",
-    body: "Find nearby jobs, capture photo, video and audio proof in-app, and get paid fast.",
-    to: "/worker",
-    icon: Smartphone,
-  },
+  // The worker app was listed here as a third portal. It is not a portal on
+  // this site -- workers find jobs and capture evidence on the phone -- and a
+  // card promising one led to a page explaining that it did not exist.
   {
     title: "Admin console",
     body: "Operations, payouts, disputes, analytics and a fraud detection dashboard.",
@@ -245,12 +241,6 @@ function Landing() {
                 className="press gradient-brand animate-gradient-pan shadow-glow inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-primary-foreground"
               >
                 Open client portal <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                to="/worker"
-                className="press inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-semibold"
-              >
-                Preview worker app
               </Link>
             </div>
             <dl className="mt-10 grid max-w-lg grid-cols-3 gap-4">
