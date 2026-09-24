@@ -1,77 +1,60 @@
-import { createFileRoute, Outlet, Link, useRouterState } from "@tanstack/react-router";
-import { Home, User, Wallet } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import { Smartphone } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { RouteGuard } from "@/components/route-guard";
+import { api } from "@/lib/api";
+import { useAuthSession } from "@/lib/auth-session";
 
+/**
+ * Where a worker lands on the website.
+ *
+ * This site is for clients: posting jobs, funding escrow, reviewing evidence
+ * and releasing payment. Finding and doing the work happens in the Android
+ * app, so the worker portal that used to live under this path -- a job feed, a
+ * task flow, a wallet and a profile, about two thousand lines of it -- has
+ * been removed rather than maintained as a second, worse copy of the app.
+ *
+ * The route itself stays, because RouteGuard sends a signed-in worker to their
+ * role's home and a dangling path would be a blank screen instead of an
+ * explanation.
+ */
 export const Route = createFileRoute("/worker")({
-  component: WorkerLayout,
+  component: WorkerOnMobile,
 });
 
-const tabs = [
-  { label: "Jobs", to: "/worker", icon: Home },
-  { label: "Wallet", to: "/worker/wallet", icon: Wallet },
-  { label: "Profile", to: "/worker/profile", icon: User },
-];
-
-function WorkerLayout() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+function WorkerOnMobile() {
+  const session = useAuthSession();
 
   return (
-    <RouteGuard role="WORKER">
-      <div className="worker-portal-container min-h-screen bg-muted/40 px-3 py-3 sm:px-6 sm:py-6">
-        <div className="mx-auto flex w-full max-w-[430px] flex-col">
-          <div className="hidden items-center justify-between pb-3 sm:flex">
-            <Link to="/" className="flex items-center gap-2 text-sm font-semibold">
-              <span className="gradient-brand grid h-8 w-8 place-items-center rounded-xl text-xs font-bold text-primary-foreground">
-                N
-              </span>
-              NetworkPeers Worker
-            </Link>
-            <ThemeToggle />
-          </div>
-
-          <div className="relative flex h-dvh min-h-screen w-full flex-col overflow-hidden rounded-[2rem] border border-border bg-background shadow-lift">
-            <div className="glass sticky top-0 z-30 flex items-center justify-between border-b border-border/70 px-4 py-3 text-sm font-medium">
-              <span className="font-semibold">Worker Portal</span>
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-success" /> Live
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pb-24">
-              <Outlet />
-            </div>
-
-            <nav className="glass sticky bottom-0 z-30 grid grid-cols-3 border-t border-border/70 px-2 py-2">
-              {tabs.map((t) => {
-                const active = pathname === t.to;
-                return (
-                  <Link
-                    key={t.to}
-                    to={t.to}
-                    className={cn(
-                      "press flex flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-colors",
-                      active ? "text-primary" : "text-muted-foreground",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid h-8 w-14 place-items-center rounded-full transition-colors",
-                        active && "bg-primary-soft",
-                      )}
-                    >
-                      <t.icon className="h-4.5 w-4.5" />
-                    </span>
-                    {t.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-        </div>
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6 py-16">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+        <Smartphone className="h-7 w-7 text-muted-foreground" aria-hidden />
       </div>
-    </RouteGuard>
+
+      <h1 className="mt-8 text-3xl font-bold tracking-tight">Your work is in the app</h1>
+
+      <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+        {session?.user.full_name ? `${session.user.full_name}, your` : "Your"} account is a worker
+        account. Finding jobs near you, capturing evidence on site and getting paid all happen in
+        the NetworkPeer Android app. This site is where clients post the work and pay for it.
+      </p>
+
+      <div className="mt-8 rounded-2xl border border-border bg-card p-5">
+        <p className="text-sm font-medium">Get the app</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Install it on the phone you will be working from, and sign in with this same email
+          address.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          void api.logout();
+        }}
+        className="press mt-8 self-start rounded-xl border border-border px-5 py-3 text-sm font-semibold"
+      >
+        Sign out
+      </button>
+    </main>
   );
 }

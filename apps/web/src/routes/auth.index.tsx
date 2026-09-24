@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Briefcase, HardHat, KeyRound, Mail, Smartphone, User } from "lucide-react";
+import { KeyRound, Mail, Smartphone, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/auth/")({
 });
 
 type Mode = "login" | "register";
-type Role = "CLIENT" | "WORKER";
+type Role = "CLIENT";
 type AuthMethod = "email" | "phone";
 
 export type PendingOtp = {
@@ -48,7 +48,10 @@ function isValidEmail(email: string): boolean {
 function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
-  const [role, setRole] = useState<Role>("CLIENT");
+  // Every account created here is a client. The API binds the role to the
+  // challenge when the code is issued and rejects it on verify, so it is
+  // sent with the request and never chosen.
+  const role: Role = "CLIENT";
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -143,36 +146,8 @@ function AuthPage() {
         ))}
       </div>
 
-      {/* Role Selection */}
-      <div className="mt-6">
-        <p className="mb-2 text-base font-medium">I am a</p>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { id: "CLIENT" as const, label: "Client", body: "I post jobs", icon: Briefcase },
-            { id: "WORKER" as const, label: "Worker", body: "I complete jobs", icon: HardHat },
-          ].map((option) => (
-            <button
-              key={option.id}
-              onClick={() => setRole(option.id)}
-              className={cn(
-                "press rounded-2xl border p-3 text-left transition-all",
-                role === option.id
-                  ? "border-primary bg-primary-soft shadow-glow"
-                  : "border-border bg-card hover:border-primary/40",
-              )}
-            >
-              <option.icon
-                className={cn(
-                  "h-4.5 w-4.5",
-                  role === option.id ? "text-primary" : "text-muted-foreground",
-                )}
-              />
-              <p className="mt-2 text-lg font-semibold">{option.label}</p>
-              <p className="text-base text-muted-foreground">{option.body}</p>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* The role picker lived here. This site is for clients: workers
+          find and do jobs in the Android app, so nothing is asked. */}
 
       <div className="mt-6 space-y-4">
         {/* Full Name field (Mandatory on registration per Rev5 §21) */}

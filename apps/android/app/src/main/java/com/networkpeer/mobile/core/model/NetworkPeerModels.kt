@@ -121,7 +121,10 @@ data class OtpRequestResult(
     @SerialName("expires_in_seconds") val expiresInSeconds: Int = 300,
     @SerialName("otp_length") val otpLength: Int = 6,
     val delivery: OtpDelivery? = null,
-    val otp: String? = null,
+    // The API calls this development_otp and sends it only when NODE_ENV is
+    // not production. Declared as `otp` with no @SerialName, this never once
+    // decoded, so the convenience it exists to provide was never available.
+    @SerialName("development_otp") val developmentOtp: String? = null,
     val success: Boolean = true,
     val message: String = "",
 )
@@ -472,26 +475,49 @@ data class QualityCheckResult(
     val checkedAt: String,
 )
 
+/**
+ * Mirrors `OCRResult` in the API's contracts.ts, field for field.
+ *
+ * It previously carried four fields the server has never sent -- modelName,
+ * detectedScript, hindiText, englishText -- and defaulted the others to
+ * `confidence = 0.98`, `language = "hi+en"`, `detectedScript = "bilingual"`.
+ * Those defaults were the problem: had a real result ever arrived without a
+ * confidence, the app would have displayed 98% and declared the document
+ * bilingual on no evidence at all. Nothing is defaulted now, so an absent
+ * field reads as absent.
+ */
 @Serializable
 data class OCRResult(
     val text: String,
-    val confidence: Double = 0.98,
+    val confidence: Double? = null,
     val engineVersion: String? = null,
-    val modelName: String? = null,
-    val language: String? = "hi+en",
-    val detectedScript: String? = "bilingual", // "hindi", "english", "bilingual"
-    val hindiText: String? = null,
-    val englishText: String? = null,
+    val language: String? = null,
     val generatedAt: String? = null,
-) {
-    val isHindiOnly: Boolean get() = detectedScript?.lowercase() == "hindi"
-    val isEnglishOnly: Boolean get() = detectedScript?.lowercase() == "english"
-    val isBilingual: Boolean get() = detectedScript?.lowercase() == "bilingual" || (hindiText != null && englishText != null)
-    val scriptBadge: String get() = when (detectedScript?.lowercase()) {
-        "hindi" -> "हिन्दी (Hindi - Devnagri)"
-        "english" -> "English (Latin)"
-        "bilingual" -> "Bilingual (हिन्दी + Eng)"
-        else -> "OCR Text"
+)
+
+/**
+ * The `ocr_status` field as the API actually reports it.
+ *
+ * Today every endpoint returns [UNAVAILABLE]: no OCR engine runs anywhere in
+ * the system and no column stores a result. The other three exist in
+ * contracts.ts and are handled here so the screens keep working unchanged on
+ * the day one is switched on.
+ */
+enum class OcrStatus {
+    UNAVAILABLE,
+    PROCESSING,
+    READY,
+    FAILED,
+    ;
+
+    companion object {
+        fun from(raw: String?): OcrStatus = when (raw?.lowercase()) {
+            "ready" -> READY
+            "processing" -> PROCESSING
+            "failed" -> FAILED
+            // An unrecognised value is not evidence that OCR succeeded.
+            else -> UNAVAILABLE
+        }
     }
 }
 
@@ -507,33 +533,57 @@ data class ReviewEvent(
     val createdAt: String,
 )
 
+/** A time-limited link to evidence in S3. */
 @Serializable
-data class SubmissionItem(
-    val id: String,
-    val jobId: String,
-    val assignmentId: String? = null,
-    val workerId: String = "anonymized",
-    val subtaskId: String? = null,
-    val unitRef: String,
-    val mediaUrl: String,
-    val thumbnailUrl: String? = null,
-    val ocrResult: OCRResult? = null,
-    val ocrStatus: String = "ready",
-    val ocrSnippet: String? = null,
-    val qualityCheck: QualityCheckResult? = null,
-    val status: String = "pending_review",
-    val reviewHistory: List<ReviewEvent> = emptyList(),
-    val submittedAt: String,
+data class SignedMedia(
+    val url: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
 )
+
+/**
+ * One piece of evidence awaiting correctionist review.
+ *
+ * This is the response of `GET /worker/jobs/{jobId}/review-queue`, transcribed
+ * from the handler that builds it rather than from the older contract type.
+ *
+ * The model it replaces could not decode that response at all. The server
+ * sends snake_case (`job_id`, `captured_at`, `ocr_status`) while the model
+ * declared camelCase with no @SerialName, and three of its fields -- unitRef,
+ * mediaUrl, submittedAt -- were non-null with no default. Because the client's
+ * Json is configured with `ignoreUnknownKeys = true`, every incoming key was
+ * silently discarded and decoding then threw on the missing required fields.
+ * The review queue has therefore never once loaded.
+ */
+@Serializable
+data class ReviewQueueItem(
+    val id: String,
+    @SerialName("job_id") val jobId: String = "",
+    @SerialName("subtask_id") val subtaskId: String? = null,
+    @SerialName("worker_id") val workerId: String = "",
+    @SerialName("media_type") val mediaType: MediaType = MediaType.IMAGE,
+    @SerialName("mime_type") val mimeType: String? = null,
+    @SerialName("file_size_bytes") val fileSizeBytes: Long? = null,
+    @SerialName("captured_at") val capturedAt: String? = null,
+    @SerialName("uploaded_at") val uploadedAt: String? = null,
+    val status: String = "pending_review",
+    @SerialName("verification_notes") val verificationNotes: String? = null,
+    @SerialName("ocr_status") val ocrStatusRaw: String? = null,
+    // No endpoint populates this yet. It is declared so the screen renders a
+    // real transcript the day one does, rather than needing a change then.
+    @SerialName("ocr_result") val ocrResult: OCRResult? = null,
+    val media: SignedMedia? = null,
+) {
+    val ocrStatus: OcrStatus get() = OcrStatus.from(ocrStatusRaw)
+}
 
 @Serializable
 data class ReviewQueueResponse(
-    val submissions: List<SubmissionItem>,
+    val submissions: List<ReviewQueueItem> = emptyList(),
 )
 
 @Serializable
 data class WorkerSubmissionsResponse(
-    val submissions: List<SubmissionItem>,
+    val submissions: List<ReviewQueueItem> = emptyList(),
 )
 
 @Serializable

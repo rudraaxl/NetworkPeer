@@ -1604,17 +1604,21 @@ export async function resolveEmailUser(input: {
   );
   const newUser = mapUser(inserted[0] as Row);
   if (input.role === "WORKER") {
+    // verification_status is stated here rather than left to the column
+    // default, so that a worker registering today does not depend on which
+    // migrations a given database has had applied (047 changed that default
+    // from 'PENDING'). See that migration for what the gate used to do.
     try {
       await pool.query(
-        `INSERT INTO worker_profiles (user_id, is_available, eligible_roles)
-         VALUES ($1, TRUE, ARRAY['collectionist']::TEXT[])
+        `INSERT INTO worker_profiles (user_id, is_available, verification_status, eligible_roles)
+         VALUES ($1, TRUE, 'VERIFIED', ARRAY['collectionist']::TEXT[])
          ON CONFLICT (user_id) DO NOTHING`,
         [newUser.id],
       );
     } catch {
       await pool.query(
-        `INSERT INTO worker_profiles (user_id, is_available)
-         VALUES ($1, TRUE)
+        `INSERT INTO worker_profiles (user_id, is_available, verification_status)
+         VALUES ($1, TRUE, 'VERIFIED')
          ON CONFLICT (user_id) DO NOTHING`,
         [newUser.id],
       );

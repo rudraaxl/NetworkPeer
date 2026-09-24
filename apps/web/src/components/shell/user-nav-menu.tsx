@@ -36,7 +36,9 @@ export function UserNavMenu({ identity }: { identity: "Client" | "Worker" | "Adm
     }
   };
 
-  const profileHref = identity === "Client" ? "/client/profile" : identity === "Worker" ? "/worker/profile" : "/admin/settings";
+  // A worker has no profile page on this site; /worker explains why.
+  const profileHref =
+    identity === "Client" ? "/client/profile" : identity === "Worker" ? "/worker" : "/admin/settings";
 
   return (
     <div className="relative" ref={menuRef}>

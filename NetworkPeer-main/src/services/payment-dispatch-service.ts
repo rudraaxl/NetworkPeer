@@ -5,7 +5,7 @@ import {
   releasePaymentOperationDispatch,
   type DispatchablePaymentOperation,
 } from "../repository.js";
-import { PaymentGatewayError, type PaymentGateway } from "./payment-gateway-service.js";
+import { autoSettleStubOperation, PaymentGatewayError, type PaymentGateway } from "./payment-gateway-service.js";
 import { captureException, logger } from "../observability.js";
 
 function dispatchFailureCode(err: unknown): string {
@@ -95,6 +95,11 @@ export class PaymentDispatchRuntime {
           clientSecret: result.clientSecret,
         });
         logger.info({ operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatched");
+        // The stub has no provider to call back, so it settles itself.
+        await autoSettleStubOperation({
+          operationId: operation.operationId,
+          providerReference: result.providerReference,
+        });
         return;
       }
 
@@ -114,6 +119,10 @@ export class PaymentDispatchRuntime {
         providerReference: result.providerReference,
       });
       logger.info({ operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatched");
+      await autoSettleStubOperation({
+        operationId: operation.operationId,
+        providerReference: result.providerReference,
+      });
     } catch (err) {
       logger.warn({ err, operationId: operation.operationId, operationType: operation.operationType }, "payment operation dispatch released for retry");
       try {

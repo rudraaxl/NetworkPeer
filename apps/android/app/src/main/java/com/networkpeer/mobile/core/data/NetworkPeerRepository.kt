@@ -28,8 +28,6 @@ import com.networkpeer.mobile.core.model.WorkerSyncPage
 import com.networkpeer.mobile.core.model.QualityCheckResult
 import com.networkpeer.mobile.core.model.ReviewQueueResponse
 import com.networkpeer.mobile.core.model.WorkerSubmissionsResponse
-import com.networkpeer.mobile.core.model.SubmissionItem
-import com.networkpeer.mobile.core.model.OCRResult
 import com.networkpeer.mobile.core.network.QualityTelemetryResult
 import com.networkpeer.mobile.core.network.ReviewSubmissionBody
 import com.networkpeer.mobile.core.network.ReviewSubmissionResult

@@ -28,15 +28,10 @@ import { Route as ClientIndexRouteImport } from './routes/client.index'
 import { Route as ClientNotificationsRouteImport } from './routes/client.notifications'
 import { Route as ClientProfileRouteImport } from './routes/client.profile'
 import { Route as ClientWalletRouteImport } from './routes/client.wallet'
-import { Route as WorkerIndexRouteImport } from './routes/worker.index'
-import { Route as WorkerProfileRouteImport } from './routes/worker.profile'
-import { Route as WorkerWalletRouteImport } from './routes/worker.wallet'
 import { Route as ClientJobsIndexRouteImport } from './routes/client.jobs.index'
 import { Route as ClientJobsJobIdRouteImport } from './routes/client.jobs.$jobId'
 import { Route as ClientJobsNewRouteImport } from './routes/client.jobs.new'
 import { Route as ClientReviewJobIdRouteImport } from './routes/client.review.$jobId'
-import { Route as WorkerJobJobIdRouteImport } from './routes/worker.job.$jobId'
-import { Route as WorkerTaskJobIdRouteImport } from './routes/worker.task.$jobId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -133,21 +128,6 @@ const ClientWalletRoute = ClientWalletRouteImport.update({
   path: '/wallet',
   getParentRoute: () => ClientRoute,
 } as any)
-const WorkerIndexRoute = WorkerIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => WorkerRoute,
-} as any)
-const WorkerProfileRoute = WorkerProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => WorkerRoute,
-} as any)
-const WorkerWalletRoute = WorkerWalletRouteImport.update({
-  id: '/wallet',
-  path: '/wallet',
-  getParentRoute: () => WorkerRoute,
-} as any)
 const ClientJobsIndexRoute = ClientJobsIndexRouteImport.update({
   id: '/jobs/',
   path: '/jobs/',
@@ -168,22 +148,12 @@ const ClientReviewJobIdRoute = ClientReviewJobIdRouteImport.update({
   path: '/review/$jobId',
   getParentRoute: () => ClientRoute,
 } as any)
-const WorkerJobJobIdRoute = WorkerJobJobIdRouteImport.update({
-  id: '/job/$jobId',
-  path: '/job/$jobId',
-  getParentRoute: () => WorkerRoute,
-} as any)
-const WorkerTaskJobIdRoute = WorkerTaskJobIdRouteImport.update({
-  id: '/task/$jobId',
-  path: '/task/$jobId',
-  getParentRoute: () => WorkerRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/client': typeof ClientRouteWithChildren
-  '/worker': typeof WorkerRouteWithChildren
+  '/worker': typeof WorkerRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/clients': typeof AdminClientsRoute
   '/admin/jobs': typeof AdminJobsRoute
@@ -196,21 +166,17 @@ export interface FileRoutesByFullPath {
   '/client/notifications': typeof ClientNotificationsRoute
   '/client/profile': typeof ClientProfileRoute
   '/client/wallet': typeof ClientWalletRoute
-  '/worker/profile': typeof WorkerProfileRoute
-  '/worker/wallet': typeof WorkerWalletRoute
   '/admin/': typeof AdminIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/client/': typeof ClientIndexRoute
-  '/worker/': typeof WorkerIndexRoute
   '/client/jobs/$jobId': typeof ClientJobsJobIdRoute
   '/client/jobs/new': typeof ClientJobsNewRoute
   '/client/review/$jobId': typeof ClientReviewJobIdRoute
-  '/worker/job/$jobId': typeof WorkerJobJobIdRoute
-  '/worker/task/$jobId': typeof WorkerTaskJobIdRoute
   '/client/jobs/': typeof ClientJobsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/worker': typeof WorkerRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/clients': typeof AdminClientsRoute
   '/admin/jobs': typeof AdminJobsRoute
@@ -223,17 +189,12 @@ export interface FileRoutesByTo {
   '/client/notifications': typeof ClientNotificationsRoute
   '/client/profile': typeof ClientProfileRoute
   '/client/wallet': typeof ClientWalletRoute
-  '/worker/profile': typeof WorkerProfileRoute
-  '/worker/wallet': typeof WorkerWalletRoute
   '/admin': typeof AdminIndexRoute
   '/auth': typeof AuthIndexRoute
   '/client': typeof ClientIndexRoute
-  '/worker': typeof WorkerIndexRoute
   '/client/jobs/$jobId': typeof ClientJobsJobIdRoute
   '/client/jobs/new': typeof ClientJobsNewRoute
   '/client/review/$jobId': typeof ClientReviewJobIdRoute
-  '/worker/job/$jobId': typeof WorkerJobJobIdRoute
-  '/worker/task/$jobId': typeof WorkerTaskJobIdRoute
   '/client/jobs': typeof ClientJobsIndexRoute
 }
 export interface FileRoutesById {
@@ -241,7 +202,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/client': typeof ClientRouteWithChildren
-  '/worker': typeof WorkerRouteWithChildren
+  '/worker': typeof WorkerRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/clients': typeof AdminClientsRoute
   '/admin/jobs': typeof AdminJobsRoute
@@ -254,17 +215,12 @@ export interface FileRoutesById {
   '/client/notifications': typeof ClientNotificationsRoute
   '/client/profile': typeof ClientProfileRoute
   '/client/wallet': typeof ClientWalletRoute
-  '/worker/profile': typeof WorkerProfileRoute
-  '/worker/wallet': typeof WorkerWalletRoute
   '/admin/': typeof AdminIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/client/': typeof ClientIndexRoute
-  '/worker/': typeof WorkerIndexRoute
   '/client/jobs/$jobId': typeof ClientJobsJobIdRoute
   '/client/jobs/new': typeof ClientJobsNewRoute
   '/client/review/$jobId': typeof ClientReviewJobIdRoute
-  '/worker/job/$jobId': typeof WorkerJobJobIdRoute
-  '/worker/task/$jobId': typeof WorkerTaskJobIdRoute
   '/client/jobs/': typeof ClientJobsIndexRoute
 }
 export interface FileRouteTypes {
@@ -286,21 +242,17 @@ export interface FileRouteTypes {
     | '/client/notifications'
     | '/client/profile'
     | '/client/wallet'
-    | '/worker/profile'
-    | '/worker/wallet'
     | '/admin/'
     | '/auth/'
     | '/client/'
-    | '/worker/'
     | '/client/jobs/$jobId'
     | '/client/jobs/new'
     | '/client/review/$jobId'
-    | '/worker/job/$jobId'
-    | '/worker/task/$jobId'
     | '/client/jobs/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/worker'
     | '/admin/analytics'
     | '/admin/clients'
     | '/admin/jobs'
@@ -313,17 +265,12 @@ export interface FileRouteTypes {
     | '/client/notifications'
     | '/client/profile'
     | '/client/wallet'
-    | '/worker/profile'
-    | '/worker/wallet'
     | '/admin'
     | '/auth'
     | '/client'
-    | '/worker'
     | '/client/jobs/$jobId'
     | '/client/jobs/new'
     | '/client/review/$jobId'
-    | '/worker/job/$jobId'
-    | '/worker/task/$jobId'
     | '/client/jobs'
   id:
     | '__root__'
@@ -343,17 +290,12 @@ export interface FileRouteTypes {
     | '/client/notifications'
     | '/client/profile'
     | '/client/wallet'
-    | '/worker/profile'
-    | '/worker/wallet'
     | '/admin/'
     | '/auth/'
     | '/client/'
-    | '/worker/'
     | '/client/jobs/$jobId'
     | '/client/jobs/new'
     | '/client/review/$jobId'
-    | '/worker/job/$jobId'
-    | '/worker/task/$jobId'
     | '/client/jobs/'
   fileRoutesById: FileRoutesById
 }
@@ -361,7 +303,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   ClientRoute: typeof ClientRouteWithChildren
-  WorkerRoute: typeof WorkerRouteWithChildren
+  WorkerRoute: typeof WorkerRoute
   AuthAdminRoute: typeof AuthAdminRoute
   AuthVerifyRoute: typeof AuthVerifyRoute
   AuthIndexRoute: typeof AuthIndexRoute
@@ -502,27 +444,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientWalletRouteImport
       parentRoute: typeof ClientRoute
     }
-    '/worker/': {
-      id: '/worker/'
-      path: '/'
-      fullPath: '/worker/'
-      preLoaderRoute: typeof WorkerIndexRouteImport
-      parentRoute: typeof WorkerRoute
-    }
-    '/worker/profile': {
-      id: '/worker/profile'
-      path: '/profile'
-      fullPath: '/worker/profile'
-      preLoaderRoute: typeof WorkerProfileRouteImport
-      parentRoute: typeof WorkerRoute
-    }
-    '/worker/wallet': {
-      id: '/worker/wallet'
-      path: '/wallet'
-      fullPath: '/worker/wallet'
-      preLoaderRoute: typeof WorkerWalletRouteImport
-      parentRoute: typeof WorkerRoute
-    }
     '/client/jobs/': {
       id: '/client/jobs/'
       path: '/jobs'
@@ -550,20 +471,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/client/review/$jobId'
       preLoaderRoute: typeof ClientReviewJobIdRouteImport
       parentRoute: typeof ClientRoute
-    }
-    '/worker/job/$jobId': {
-      id: '/worker/job/$jobId'
-      path: '/job/$jobId'
-      fullPath: '/worker/job/$jobId'
-      preLoaderRoute: typeof WorkerJobJobIdRouteImport
-      parentRoute: typeof WorkerRoute
-    }
-    '/worker/task/$jobId': {
-      id: '/worker/task/$jobId'
-      path: '/task/$jobId'
-      fullPath: '/worker/task/$jobId'
-      preLoaderRoute: typeof WorkerTaskJobIdRouteImport
-      parentRoute: typeof WorkerRoute
     }
   }
 }
@@ -617,30 +524,11 @@ const ClientRouteChildren: ClientRouteChildren = {
 const ClientRouteWithChildren =
   ClientRoute._addFileChildren(ClientRouteChildren)
 
-interface WorkerRouteChildren {
-  WorkerProfileRoute: typeof WorkerProfileRoute
-  WorkerWalletRoute: typeof WorkerWalletRoute
-  WorkerIndexRoute: typeof WorkerIndexRoute
-  WorkerJobJobIdRoute: typeof WorkerJobJobIdRoute
-  WorkerTaskJobIdRoute: typeof WorkerTaskJobIdRoute
-}
-
-const WorkerRouteChildren: WorkerRouteChildren = {
-  WorkerProfileRoute: WorkerProfileRoute,
-  WorkerWalletRoute: WorkerWalletRoute,
-  WorkerIndexRoute: WorkerIndexRoute,
-  WorkerJobJobIdRoute: WorkerJobJobIdRoute,
-  WorkerTaskJobIdRoute: WorkerTaskJobIdRoute,
-}
-
-const WorkerRouteWithChildren =
-  WorkerRoute._addFileChildren(WorkerRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   ClientRoute: ClientRouteWithChildren,
-  WorkerRoute: WorkerRouteWithChildren,
+  WorkerRoute: WorkerRoute,
   AuthAdminRoute: AuthAdminRoute,
   AuthVerifyRoute: AuthVerifyRoute,
   AuthIndexRoute: AuthIndexRoute,
