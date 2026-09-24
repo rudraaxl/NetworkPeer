@@ -1,7 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { config } from "../config.js";
-import type { PaymentProvider } from "../repository.js";
+import { settlePaymentWebhook, type PaymentProvider } from "../repository.js";
+import { logger } from "../observability.js";
 
 export class PaymentGatewayError extends Error {
   constructor(
@@ -69,6 +70,53 @@ export class StubPaymentGateway implements PaymentGateway {
   async createPayout(input: GatewayPayoutRequest): Promise<GatewayPayoutResult> {
     parseAmount(input.amountCents);
     return { providerReference: `stub_po_${randomUUID().replaceAll("-", "")}` };
+  }
+}
+
+/**
+ * Settle a stub operation immediately, as if its webhook had arrived.
+ *
+ * Real money moves in two steps: the gateway is asked to create an intent, and
+ * the provider later calls back to say what happened. The stub gateway only
+ * does the first half, so with no provider to call back, escrow stayed PENDING
+ * and the job never left FUNDING -- which meant no job could ever reach POSTED
+ * and the worker feed was permanently empty without a live card.
+ *
+ * This supplies the missing half by driving `settle_payment_webhook`, the same
+ * database function the Stripe webhook calls. That distinction matters: the
+ * ledger transaction is written, the payment operation is marked SUCCEEDED,
+ * and the job moves to POSTED/HELD through the identical path with the
+ * identical invariants. Nothing about the financial model is bypassed or
+ * relaxed -- there is simply no card behind it.
+ *
+ * In particular the `enforce_job_financial_state` trigger is untouched. It is
+ * what guarantees an active job has escrow HELD and an approved one has escrow
+ * RELEASED, so removing it to unblock testing would let the platform record
+ * work it had never collected money for, with no way afterwards to tell which
+ * jobs were real.
+ *
+ * config.ts refuses PAYMENT_GATEWAY=stub when NODE_ENV is production, so this
+ * cannot run against real users.
+ */
+export async function autoSettleStubOperation(input: {
+  operationId: string;
+  providerReference: string;
+}): Promise<void> {
+  if (config.PAYMENT_GATEWAY !== "stub") return;
+  try {
+    await settlePaymentWebhook({
+      provider: "STUB",
+      providerEventId: `stub_evt_${input.operationId}`,
+      providerReference: input.providerReference,
+      eventType: "stub.auto_settled",
+      outcome: "SUCCEEDED",
+      payload: { auto_settled: true, operation_id: input.operationId },
+    });
+    logger.info({ operationId: input.operationId }, "stub payment operation auto-settled");
+  } catch (err) {
+    // A failure here leaves the operation dispatched and unsettled, which is
+    // the same state a lost webhook produces and is recoverable the same way.
+    logger.warn({ err, operationId: input.operationId }, "stub auto-settlement failed");
   }
 }
 

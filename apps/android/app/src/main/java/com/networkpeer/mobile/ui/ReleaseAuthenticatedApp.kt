@@ -1274,13 +1274,23 @@ private fun WorkerDiscoveryScreen(
             // NP-15: when both calls failed this substituted a hardcoded job
             // list, so an outage looked like available work. The failure now
             // reaches the catch below and is shown to the worker.
+            // Nearby first. listAllPostedJobs returns the literal string
+            // '1_TO_5_KM' for every row -- only the nearby query computes a
+            // real distance_band, and only when the worker's location is
+            // fresh, which is why the location is posted just above. Asking
+            // /all first meant every job claimed the same distance and the
+            // "Nearby" filter matched everything.
+            //
+            // There is no empty-screen risk in preferring it: the service
+            // falls back to listAll server-side when it has no usable
+            // location, so this ordering can only add information.
             val response = try {
-                container.marketplaceRepository.allWorkerJobs(
+                container.marketplaceRepository.nearbyWorkerJobs(
+                    radiusKm = null,
                     page = if (reset) 1 else nextPage,
                 )
             } catch (_: Throwable) {
-                container.marketplaceRepository.nearbyWorkerJobs(
-                    radiusKm = null,
+                container.marketplaceRepository.allWorkerJobs(
                     page = if (reset) 1 else nextPage,
                 )
             }

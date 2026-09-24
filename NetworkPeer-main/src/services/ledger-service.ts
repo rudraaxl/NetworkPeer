@@ -16,6 +16,7 @@ import {
 } from "../repository.js";
 import {
   PaymentGatewayError,
+  autoSettleStubOperation,
   createPaymentGateway,
   type PaymentGateway,
   type NormalizedPaymentWebhook,
@@ -120,6 +121,12 @@ export class LedgerService {
         operationId: claimedOperation.operationId,
         providerReference: gatewayResult.providerReference,
         clientSecret: gatewayResult.clientSecret,
+      });
+      // The stub has no provider to call back, so it settles itself. Without
+      // this the job stays in FUNDING and never reaches the worker feed.
+      await autoSettleStubOperation({
+        operationId: claimedOperation.operationId,
+        providerReference: gatewayResult.providerReference,
       });
       return {
         ...operation,
