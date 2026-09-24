@@ -187,6 +187,8 @@ import com.networkpeer.mobile.ui.components.NpTextAction
 import com.networkpeer.mobile.ui.components.NpTopBar
 import androidx.compose.material.icons.outlined.Info
 import com.networkpeer.mobile.ui.components.NpBanner
+import androidx.compose.material.icons.outlined.BusinessCenter
+import androidx.compose.ui.text.style.TextAlign
 
 enum class AppNavTab {
     MY_JOBS,
@@ -241,10 +243,8 @@ enum class JobFilter(val label: Int) {
 internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSession) {
     val scope = rememberCoroutineScope()
     val deepLinkedJobId by container.deepLinkedJobId.collectAsState()
-    var clientJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var workerJobId by rememberSaveable { mutableStateOf<String?>(null) }
     var workerPreviewJobId by rememberSaveable { mutableStateOf<String?>(null) }
-    var creatingJob by rememberSaveable { mutableStateOf(false) }
     var inboxOpen by rememberSaveable { mutableStateOf(false) }
 
     var selectedTab by rememberSaveable { mutableStateOf(AppNavTab.MY_JOBS) }
@@ -253,15 +253,12 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
 
     LaunchedEffect(deepLinkedJobId, session.user.role) {
         val jobId = deepLinkedJobId ?: return@LaunchedEffect
-        if (session.user.role == UserRole.CLIENT) {
-            clientJobId = jobId
-        } else if (session.user.role == UserRole.WORKER) {
-            workerJobId = jobId
-        }
+        // Only a worker has somewhere to open a job here.
+        if (session.user.role == UserRole.WORKER) workerJobId = jobId
         container.consumeDeepLink()
     }
 
-    val isDetailFlow = clientJobId != null || workerJobId != null || workerPreviewJobId != null || creatingJob || inboxOpen
+    val isDetailFlow = workerJobId != null || workerPreviewJobId != null || inboxOpen
     val themeMode by container.themeMode.collectAsState()
     val systemInDark = isSystemInDarkTheme()
     val isDark = when (themeMode) {
@@ -332,10 +329,8 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                                 onClick = {
                                     userMenuOpen = false
                                     inboxOpen = false
-                                    clientJobId = null
                                     workerJobId = null
                                     workerPreviewJobId = null
-                                    creatingJob = false
                                     selectedTab = AppNavTab.MY_JOBS
                                 },
                             )
@@ -345,10 +340,8 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                                 onClick = {
                                     userMenuOpen = false
                                     inboxOpen = false
-                                    clientJobId = null
                                     workerJobId = null
                                     workerPreviewJobId = null
-                                    creatingJob = false
                                     selectedTab = AppNavTab.DASHBOARD_PROFILE
                                 },
                             )
@@ -424,36 +417,9 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                             )
                         }
 
-                        // 2. CENTER ITEM: + Sign in Circle (Post a Job)
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Surface(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(CircleShape)
-                                    .clickable {
-                                        creatingJob = true
-                                    },
-                                shape = CircleShape,
-                                color = MaterialTheme.np.ink, // Canary Yellow
-                                shadowElevation = 6.dp,
-                                border = BorderStroke(2.dp, MaterialTheme.np.onInk),
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Add,
-                                        contentDescription = "Post a Job",
-                                        tint = MaterialTheme.np.onInk, // Obsidian Charcoal
-                                        modifier = Modifier.size(32.dp),
-                                    )
-                                }
-                            }
-                        }
+                        // A circular "+ Post a Job" button used to sit here,
+                        // in the middle of the worker's navigation. Posting a
+                        // job is a client action and now happens on the website.
 
                         // 3. RIGHT ITEM: Dashboard / Profile
                         Column(
@@ -496,44 +462,21 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                     onBack = { inboxOpen = false },
                     onOpenJob = { jobId ->
                         inboxOpen = false
-                        when (session.user.role) {
-                            UserRole.CLIENT -> clientJobId = jobId
-                            UserRole.WORKER -> workerJobId = jobId
-                            UserRole.ADMIN -> Unit
-                        }
+                        // Only a worker has somewhere to open a job here.
+                        if (session.user.role == UserRole.WORKER) workerJobId = jobId
                     },
                 )
             } else {
                 when (session.user.role) {
-                    UserRole.CLIENT -> when {
-                        creatingJob -> ClientCreateJobScreen(
-                            container = container,
-                            onBack = { creatingJob = false },
-                            onCreated = { jobId ->
-                                creatingJob = false
-                                clientJobId = jobId
-                            },
-                        )
-                        clientJobId != null -> ClientJobDetailScreen(
-                            container = container,
-                            jobId = clientJobId!!,
-                            onBack = { clientJobId = null },
-                        )
-                        else -> when (selectedTab) {
-                            AppNavTab.MY_JOBS -> ClientHomeScreen(
-                                container = container,
-                                onCreateJob = { creatingJob = true },
-                                onOpenJob = { clientJobId = it },
-                            )
-                            AppNavTab.DASHBOARD_PROFILE -> ClientDashboardProfileScreen(
-                                container = container,
-                                session = session,
-                                onCreateJob = { creatingJob = true },
-                                onOpenJob = { clientJobId = it },
-                                onGoToJobs = { selectedTab = AppNavTab.MY_JOBS },
-                            )
-                        }
-                    }
+                    // This app is for workers. A client's tools -- posting a
+                    // job, funding escrow, reviewing and releasing payment --
+                    // live on the website, and the screens that used to render
+                    // them here were a second, worse copy of it maintained by
+                    // nobody. Signing a client in to a phone-sized version of
+                    // that was never going to serve them.
+                    UserRole.CLIENT -> WrongAppScreen(
+                        onSignOut = { scope.launch { container.authRepository.logout() } },
+                    )
                     UserRole.WORKER -> when {
                         workerPreviewJobId != null -> WorkerJobPreviewScreen(
                             container = container,
@@ -548,14 +491,6 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                             container = container,
                             jobId = workerJobId!!,
                             onBack = { workerJobId = null },
-                        )
-                        creatingJob -> ClientCreateJobScreen(
-                            container = container,
-                            onBack = { creatingJob = false },
-                            onCreated = { jobId ->
-                                creatingJob = false
-                                workerPreviewJobId = jobId
-                            },
                         )
                         else -> when (selectedTab) {
                             AppNavTab.MY_JOBS -> WorkerDiscoveryScreen(
@@ -576,58 +511,6 @@ internal fun ReleaseAuthenticatedApp(container: AppContainer, session: StoredSes
                     }
                     UserRole.ADMIN -> AdminBoundaryScreen()
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClientDashboardProfileScreen(
-    container: AppContainer,
-    session: StoredSession,
-    onCreateJob: () -> Unit,
-    onOpenJob: (String) -> Unit,
-    onGoToJobs: () -> Unit,
-) {
-    var selectedSubTab by rememberSaveable { mutableStateOf(0) }
-    var isEditMode by rememberSaveable { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(
-            selectedTabIndex = selectedSubTab,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary,
-        ) {
-            Tab(
-                selected = selectedSubTab == 0,
-                onClick = { selectedSubTab = 0 },
-                text = { Text("Overview", fontWeight = if (selectedSubTab == 0) FontWeight.Bold else FontWeight.Normal) },
-                icon = { Icon(Icons.Outlined.Dashboard, contentDescription = null, modifier = Modifier.size(20.dp)) },
-            )
-            Tab(
-                selected = selectedSubTab == 1,
-                onClick = { selectedSubTab = 1 },
-                text = { Text("Profile & Settings", fontWeight = if (selectedSubTab == 1) FontWeight.Bold else FontWeight.Normal) },
-                icon = { Icon(Icons.Outlined.Person, contentDescription = null, modifier = Modifier.size(20.dp)) },
-            )
-        }
-
-        Box(modifier = Modifier.weight(1f)) {
-            if (selectedSubTab == 0) {
-                ClientDashboardScreen(
-                    container = container,
-                    onCreateJob = onCreateJob,
-                    onOpenJob = onOpenJob,
-                    onGoToJobs = onGoToJobs,
-                    onGoToWallet = { selectedSubTab = 1 },
-                )
-            } else {
-                UserProfileScreen(
-                    container = container,
-                    session = session,
-                    isEditMode = isEditMode,
-                    onToggleEditMode = { isEditMode = it },
-                )
             }
         }
     }
@@ -679,139 +562,6 @@ private fun WorkerDashboardProfileScreen(
                     onToggleEditMode = { isEditMode = it },
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun ClientDashboardScreen(
-    container: AppContainer,
-    onCreateJob: () -> Unit,
-    onOpenJob: (String) -> Unit,
-    onGoToJobs: () -> Unit,
-    onGoToWallet: () -> Unit,
-) {
-    val context = LocalContext.current
-    var profile by remember { mutableStateOf<UserProfile?>(null) }
-    var jobs by remember { mutableStateOf<List<Job>>(emptyList()) }
-    var balances by remember { mutableStateOf<List<WalletBalance>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    suspend fun load() {
-        loading = true
-        error = null
-        try {
-            profile = runCatching { container.authRepository.getProfile() }.getOrNull()
-            val jobsResp = container.marketplaceRepository.clientJobs(page = 1, perPage = 5)
-            jobs = jobsResp.items
-            balances = container.marketplaceRepository.clientWallet().balances
-        } catch (f: Throwable) {
-            error = friendlyError(context, f)
-        } finally {
-            loading = false
-        }
-    }
-
-    LaunchedEffect(Unit) { load() }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            Card(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = profile?.fullName?.take(1)?.uppercase() ?: "C",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Welcome back,", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            text = profile?.fullName ?: "Client Workspace",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("Client", fontWeight = FontWeight.SemiBold) },
-                        leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) },
-                    )
-                }
-            }
-        }
-
-        item {
-            Button(
-                onClick = onCreateJob,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Post a New Job", fontWeight = FontWeight.Bold)
-            }
-        }
-
-        item {
-            Card(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier.fillMaxWidth().clickable { onGoToWallet() },
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Escrow & Wallet", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text("View Details >", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                    if (balances.isEmpty()) {
-                        Text("Wallet ready", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        val b = balances.first()
-                        Text(formatMoney(b.availableBalanceCents.toLongOrNull() ?: 0L, b.currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("Pending Escrow: ${formatMoney(b.pendingEscrowCents.toLongOrNull() ?: 0L, b.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Recent Postings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = onGoToJobs) {
-                    Text("See All (${jobs.size})")
-                }
-            }
-        }
-
-        if (jobs.isEmpty() && !loading) {
-            item {
-                EmptyCard("No active postings", "Post a new field work job to connect with verified nearby workers.")
-            }
-        }
-
-        items(jobs.take(3), key = { it.id }) { job ->
-            ClientJobCard(job, onClick = { onOpenJob(job.id) })
         }
     }
 }
@@ -1001,50 +751,6 @@ private fun WorkerDashboardScreen(
         items(nearbyJobs.take(3), key = { "dash-${it.id}" }) { gig ->
             WorkerSummaryCard(gig, onClick = { onOpenJob(gig.id) })
         }
-    }
-}
-
-@Composable
-private fun ClientWalletOnlyScreen(container: AppContainer) {
-    val context = LocalContext.current
-    var balances by remember { mutableStateOf<List<WalletBalance>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    suspend fun load() {
-        loading = true
-        error = null
-        try {
-            balances = container.marketplaceRepository.clientWallet().balances
-        } catch (f: Throwable) {
-            error = friendlyError(context, f)
-        } finally {
-            loading = false
-        }
-    }
-
-    LaunchedEffect(Unit) { load() }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Client Wallet", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Manage your escrow deposits and funds", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = { scope.launch { load() } }, enabled = !loading) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Refresh wallet")
-                }
-            }
-        }
-        item { WalletCard(balances) }
-        error?.let { item { InlineNotice(it, Tone.Danger) } }
-        if (loading) item { LoadingCard("Refreshing balance...") }
     }
 }
 
@@ -1488,100 +1194,6 @@ private fun UserProfileScreen(
 }
 
 @Composable
-private fun ClientHomeScreen(
-    container: AppContainer,
-    onCreateJob: () -> Unit,
-    onOpenJob: (String) -> Unit,
-) {
-    val context = LocalContext.current
-    var jobs by remember { mutableStateOf<List<Job>>(emptyList()) }
-    var balances by remember { mutableStateOf<List<WalletBalance>>(emptyList()) }
-    var nextPage by remember { mutableStateOf(1) }
-    var hasMore by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    suspend fun load(reset: Boolean) {
-        if (loading && !reset) return
-        loading = true
-        error = null
-        try {
-            if (reset) reconcileSafely(container)
-            val response = container.marketplaceRepository.clientJobs(page = if (reset) 1 else nextPage)
-            val merged = if (reset) response.items else (jobs + response.items).distinctBy { it.id }
-            jobs = merged
-            nextPage = response.page + 1
-            hasMore = merged.size < response.total
-            if (reset) balances = container.marketplaceRepository.clientWallet().balances
-        } catch (failure: Throwable) {
-            error = friendlyError(context, failure)
-        } finally {
-            loading = false
-        }
-    }
-
-    LaunchedEffect(Unit) { load(reset = true) }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.client_workspace), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.client_workspace_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = { scope.launch { load(reset = true) } }, enabled = !loading) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.refresh_jobs))
-                }
-            }
-        }
-        if (container.client.configuration.fcmConfigured) item { NotificationPermissionCard() }
-        item { WalletCard(balances) }
-        item {
-            Button(onClick = onCreateJob, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Outlined.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.create_job))
-            }
-        }
-        item { Text(stringResource(R.string.your_jobs), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
-        if (loading && jobs.isEmpty()) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Tone.Danger) } }
-        if (!loading && error == null && jobs.isEmpty()) item {
-            EmptyCard(stringResource(R.string.no_jobs_title), stringResource(R.string.no_jobs_body))
-        }
-        items(jobs, key = { it.id }) { job -> ClientJobCard(job, onClick = { onOpenJob(job.id) }) }
-        if (hasMore) item {
-            OutlinedButton(onClick = { scope.launch { load(reset = false) } }, modifier = Modifier.fillMaxWidth(), enabled = !loading) {
-                Text(stringResource(R.string.load_more))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClientJobCard(job: Job, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(job.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                StatusPill(job.status)
-            }
-            Text(job.description, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(formatMoney(job.budget_cents, job.currency), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
 private fun WalletCard(balances: List<WalletBalance>) {
     Card(
         shape = MaterialTheme.shapes.large,
@@ -1609,712 +1221,6 @@ private fun WalletCard(balances: List<WalletBalance>) {
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClientCreateJobScreen(
-    container: AppContainer,
-    onBack: () -> Unit,
-    onCreated: (String) -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var title by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf("") }
-    var budgetCents by rememberSaveable { mutableStateOf("") }
-    var currency by rememberSaveable { mutableStateOf("INR") }
-    var latitude by rememberSaveable { mutableStateOf("12.971599") }
-    var longitude by rememberSaveable { mutableStateOf("77.594566") }
-    var address by rememberSaveable { mutableStateOf("MG Road, Bengaluru, Karnataka") }
-    var scheduledAt by rememberSaveable { mutableStateOf("") }
-    var publicTitle by rememberSaveable { mutableStateOf("") }
-    var publicDescription by rememberSaveable { mutableStateOf("") }
-    val subtasks = remember { mutableStateListOf<ClientJobSubtaskDraft>() }
-    var issues by remember { mutableStateOf<List<ClientJobDraftIssue>>(emptyList()) }
-    var requestError by remember { mutableStateOf<String?>(null) }
-    var creating by remember { mutableStateOf(false) }
-
-    fun currentDraft(): ClientJobDraft = ClientJobDraft(
-        title = title,
-        description = description,
-        category = category,
-        budgetCents = budgetCents,
-        currency = currency,
-        latitude = latitude,
-        longitude = longitude,
-        address = address,
-        scheduledAt = scheduledAt,
-        publicTitle = publicTitle,
-        publicDescription = publicDescription,
-        subtasks = subtasks.toList(),
-    )
-
-    fun issueText(field: ClientJobDraftField, subtaskIndex: Int? = null): String? {
-        val issue = issues.firstOrNull { it.field == field && it.subtaskIndex == subtaskIndex } ?: return null
-        return context.getString(
-            when (issue.problem) {
-                ClientJobDraftProblem.REQUIRED -> R.string.validation_required
-                ClientJobDraftProblem.INVALID_AMOUNT -> R.string.validation_amount
-                ClientJobDraftProblem.INVALID_CURRENCY -> R.string.validation_currency
-                ClientJobDraftProblem.INVALID_LATITUDE -> R.string.validation_latitude
-                ClientJobDraftProblem.INVALID_LONGITUDE -> R.string.validation_longitude
-                ClientJobDraftProblem.INVALID_TIMESTAMP -> R.string.validation_timestamp
-                ClientJobDraftProblem.INVALID_LENGTH -> R.string.validation_text_length
-            },
-        )
-    }
-
-    fun setLocation(location: Location?) {
-        if (location == null) {
-            requestError = context.getString(R.string.location_permission_required)
-            return
-        }
-        latitude = String.format(Locale.US, "%.6f", location.latitude)
-        longitude = String.format(Locale.US, "%.6f", location.longitude)
-        issues = issues.filterNot { it.field == ClientJobDraftField.LATITUDE || it.field == ClientJobDraftField.LONGITUDE }
-    }
-
-    val updateLocation: () -> Unit = {
-        scope.launch { setLocation(container.currentOrLastLocation()) }
-    }
-    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true || grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
-            updateLocation()
-        } else {
-            requestError = context.getString(R.string.location_permission_required)
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            BackHeader(stringResource(R.string.create_job_title), onBack)
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.create_job_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        item {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.TITLE } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.job_title)) },
-                isError = issueText(ClientJobDraftField.TITLE) != null,
-                supportingText = issueText(ClientJobDraftField.TITLE)?.let { message -> { Text(message) } },
-            )
-        }
-        item {
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.DESCRIPTION } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.job_description)) },
-                minLines = 3,
-                isError = issueText(ClientJobDraftField.DESCRIPTION) != null,
-                supportingText = issueText(ClientJobDraftField.DESCRIPTION)?.let { message -> { Text(message) } },
-            )
-        }
-        item {
-            OutlinedTextField(
-                value = category,
-                onValueChange = { category = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.CATEGORY } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.category)) },
-                isError = issueText(ClientJobDraftField.CATEGORY) != null,
-                supportingText = issueText(ClientJobDraftField.CATEGORY)?.let { message -> { Text(message) } },
-            )
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = budgetCents,
-                    onValueChange = { budgetCents = it.filter(Char::isDigit); issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.BUDGET } },
-                    modifier = Modifier.weight(1f),
-                    label = { Text(stringResource(R.string.budget_cents)) },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = issueText(ClientJobDraftField.BUDGET) != null,
-                    supportingText = issueText(ClientJobDraftField.BUDGET)?.let { message -> { Text(message) } },
-                )
-                OutlinedTextField(
-                    value = currency,
-                    onValueChange = { currency = it.uppercase(); issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.CURRENCY } },
-                    modifier = Modifier.weight(0.55f),
-                    label = { Text(stringResource(R.string.currency)) },
-                    singleLine = true,
-                    isError = issueText(ClientJobDraftField.CURRENCY) != null,
-                    supportingText = issueText(ClientJobDraftField.CURRENCY)?.let { message -> { Text(message) } },
-                )
-            }
-        }
-        item {
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.ADDRESS } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.address_optional)) },
-                isError = issueText(ClientJobDraftField.ADDRESS) != null,
-                supportingText = issueText(ClientJobDraftField.ADDRESS)?.let { message -> { Text(message) } },
-            )
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = latitude,
-                    onValueChange = { latitude = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.LATITUDE } },
-                    modifier = Modifier.weight(1f),
-                    label = { Text(stringResource(R.string.latitude)) },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = issueText(ClientJobDraftField.LATITUDE) != null,
-                    supportingText = issueText(ClientJobDraftField.LATITUDE)?.let { message -> { Text(message) } },
-                )
-                OutlinedTextField(
-                    value = longitude,
-                    onValueChange = { longitude = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.LONGITUDE } },
-                    modifier = Modifier.weight(1f),
-                    label = { Text(stringResource(R.string.longitude)) },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = issueText(ClientJobDraftField.LONGITUDE) != null,
-                    supportingText = issueText(ClientJobDraftField.LONGITUDE)?.let { message -> { Text(message) } },
-                )
-            }
-        }
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // Read outside the Canvas: a DrawScope lambda is not a
-                    // composable scope, so the palette cannot be read inside it.
-                    val gridColor = MaterialTheme.np.hairline
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val stroke = 1.dp.toPx()
-                        val gridSpacing = 24.dp.toPx()
-                        var x = 0f
-                        while (x < size.width) {
-                            drawLine(gridColor, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), strokeWidth = stroke)
-                            x += gridSpacing
-                        }
-                        var y = 0f
-                        while (y < size.height) {
-                            drawLine(gridColor, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = stroke)
-                            y += gridSpacing
-                        }
-                    }
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.np.accent.copy(alpha = 0.2f),
-                            modifier = Modifier.size(52.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.LocationOn,
-                                    contentDescription = "Job Location Pin",
-                                    tint = MaterialTheme.np.accent,
-                                    modifier = Modifier.size(30.dp),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        ) {
-                            Text(
-                                text = if (address.isNotBlank()) address else "Lat: $latitude, Lng: $longitude",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 0.dp, bottomEnd = 8.dp),
-                        color = MaterialTheme.np.accent,
-                        modifier = Modifier.align(Alignment.TopStart),
-                    ) {
-                        Text(
-                            text = "MAP PREVIEW · JOB LOCATION",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            }
-        }
-        item {
-            OutlinedButton(
-                onClick = {
-                    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    if (fine || coarse) updateLocation()
-                    else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Outlined.LocationOn, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Auto-detect current location (Optional)")
-            }
-        }
-        item {
-            OutlinedTextField(
-                value = scheduledAt,
-                onValueChange = { scheduledAt = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.SCHEDULED_AT } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.scheduled_at_optional)) },
-                isError = issueText(ClientJobDraftField.SCHEDULED_AT) != null,
-                supportingText = issueText(ClientJobDraftField.SCHEDULED_AT)?.let { message -> { Text(message) } },
-            )
-        }
-        item {
-            OutlinedTextField(
-                value = publicTitle,
-                onValueChange = { publicTitle = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.PUBLIC_TITLE } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.worker_safe_title)) },
-                isError = issueText(ClientJobDraftField.PUBLIC_TITLE) != null,
-                supportingText = issueText(ClientJobDraftField.PUBLIC_TITLE)?.let { message -> { Text(message) } },
-            )
-        }
-        item {
-            OutlinedTextField(
-                value = publicDescription,
-                onValueChange = { publicDescription = it; issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.PUBLIC_DESCRIPTION } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.worker_safe_description)) },
-                minLines = 2,
-                isError = issueText(ClientJobDraftField.PUBLIC_DESCRIPTION) != null,
-                supportingText = issueText(ClientJobDraftField.PUBLIC_DESCRIPTION)?.let { message -> { Text(message) } },
-            )
-        }
-        item { Text(stringResource(R.string.checklist_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
-        items(subtasks.indices.toList(), key = { it }) { index ->
-            val subtask = subtasks[index]
-            Card(shape = MaterialTheme.shapes.medium) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.checklist_title), modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                        IconButton(onClick = { subtasks.removeAt(index) }, content = {
-                            Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.remove_checklist_item))
-                        })
-                    }
-                    OutlinedTextField(
-                        value = subtask.title,
-                        onValueChange = { subtasks[index] = subtask.copy(title = it); issues = issues.filterNot { issue -> issue.field == ClientJobDraftField.SUBTASK && issue.subtaskIndex == index } },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.subtask_title)) },
-                        isError = issueText(ClientJobDraftField.SUBTASK, index) != null,
-                        supportingText = issueText(ClientJobDraftField.SUBTASK, index)?.let { message -> { Text(message) } },
-                    )
-                    OutlinedTextField(
-                        value = subtask.description,
-                        onValueChange = { subtasks[index] = subtask.copy(description = it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.subtask_description_optional)) },
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = subtask.isRequired,
-                            onClick = { subtasks[index] = subtask.copy(isRequired = true) },
-                            label = { Text(stringResource(R.string.required)) },
-                        )
-                        FilterChip(
-                            selected = !subtask.isRequired,
-                            onClick = { subtasks[index] = subtask.copy(isRequired = false) },
-                            label = { Text(stringResource(R.string.optional)) },
-                        )
-                    }
-                }
-            }
-        }
-        item {
-            OutlinedButton(onClick = { subtasks += ClientJobSubtaskDraft() }, modifier = Modifier.fillMaxWidth(), enabled = subtasks.size < 50) {
-                Icon(Icons.Outlined.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.add_checklist_item))
-            }
-        }
-        requestError?.let { item { InlineNotice(it, Tone.Danger) } }
-        item {
-            Button(
-                onClick = {
-                    val draft = currentDraft()
-                    issues = ClientJobDraftValidator.validate(draft)
-                    requestError = null
-                    if (issues.isEmpty()) {
-                        scope.launch {
-                            creating = true
-                            try {
-                                val fingerprint = ClientJobDraftValidator.fingerprint(draft)
-                                val key = container.durableState.idempotencyKey("create_job", fingerprint)
-                                val job = container.marketplaceRepository.createClientJob(
-                                    ClientJobDraftValidator.createBody(draft, key),
-                                )
-                                container.durableState.clearIdempotencyKey("create_job", fingerprint)
-                                onCreated(job.id)
-                            } catch (failure: Throwable) {
-                                requestError = friendlyError(context, failure)
-                            } finally {
-                                creating = false
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !creating,
-            ) {
-                if (creating) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(stringResource(if (creating) R.string.creating_job else R.string.submit_job))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClientJobDetailScreen(
-    container: AppContainer,
-    jobId: String,
-    onBack: () -> Unit,
-) {
-    val context = LocalContext.current
-    val activity = context as? ComponentActivity
-    val scope = rememberCoroutineScope()
-    var detail by remember { mutableStateOf<ClientJobDetail?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var actioning by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var actionNotice by remember { mutableStateOf<String?>(null) }
-    var evidence by remember { mutableStateOf<List<ClientEvidenceReviewItem>>(emptyList()) }
-    var evidenceLoading by remember { mutableStateOf(false) }
-    var evidenceError by remember { mutableStateOf<String?>(null) }
-    var showCancelDialog by remember { mutableStateOf(false) }
-    var cancellationReason by rememberSaveable { mutableStateOf("") }
-
-    suspend fun reload() {
-        loading = true
-        try {
-            reconcileSafely(container)
-            val loaded = container.marketplaceRepository.clientJob(jobId)
-            detail = loaded
-            if (!loaded.job.isUnfundedFunding()) {
-                container.durableState.clearIdempotencyKey("fund_job", jobId)
-            }
-            if (loaded.job.status in REVIEWABLE_JOB_STATUSES) {
-                evidenceLoading = true
-                try {
-                    evidence = container.marketplaceRepository.clientJobEvidence(jobId).evidence
-                    evidenceError = null
-                } catch (failure: Throwable) {
-                    evidence = emptyList()
-                    evidenceError = friendlyError(context, failure)
-                } finally {
-                    evidenceLoading = false
-                }
-            } else {
-                evidence = emptyList()
-                evidenceError = null
-            }
-            error = null
-        } catch (failure: Throwable) {
-            error = friendlyError(context, failure)
-        } finally {
-            loading = false
-        }
-    }
-
-    val paymentResultHandler by rememberUpdatedState(newValue = { result: PaymentSheetResult ->
-        actioning = false
-        actionNotice = when (result) {
-            is PaymentSheetResult.Completed -> context.getString(R.string.payment_completed)
-            is PaymentSheetResult.Canceled -> context.getString(R.string.payment_canceled)
-            is PaymentSheetResult.Failed -> context.getString(
-                R.string.payment_failed,
-                result.error.localizedMessage ?: context.getString(R.string.unknown_error),
-            )
-        }
-        scope.launch {
-            reconcileSafely(container)
-            reload()
-        }
-    })
-    val paymentSheet = remember(activity, container.client.configuration.stripeConfigured) {
-        if (!container.client.configuration.stripeConfigured) {
-            null
-        } else {
-            activity?.let { host ->
-                runCatching { PaymentSheet.Builder { result -> paymentResultHandler(result) }.build(host) }.getOrNull()
-            }
-        }
-    }
-
-    LaunchedEffect(jobId) { reload() }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item { BackHeader(stringResource(R.string.job_detail), onBack) }
-        if (loading) item { LoadingCard(stringResource(R.string.loading)) }
-        error?.let { item { InlineNotice(it, Tone.Danger) } }
-        detail?.let { loaded ->
-            item {
-                Card(shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(loaded.job.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            StatusPill(loaded.job.status)
-                        }
-                        Text(loaded.job.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatMoney(loaded.job.budget_cents, loaded.job.currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text(loaded.job.address ?: stringResource(R.string.address_unavailable), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            item {
-                Text(stringResource(R.string.job_checklist), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    loaded.subtasks.sortedBy { it.sequence_order }.forEach { subtask ->
-                        AssistChip(
-                            onClick = {},
-                            label = {
-                                Text(
-                                    stringResource(
-                                        if (subtask.is_required) R.string.required_subtask else R.string.optional_subtask,
-                                        subtask.title,
-                                    ),
-                                )
-                            },
-                            leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        )
-                    }
-                }
-            }
-            if (loaded.job.status in REVIEWABLE_JOB_STATUSES) {
-                item {
-                    Text(stringResource(R.string.evidence_review), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.evidence_review_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (evidenceLoading) item { LoadingCard(stringResource(R.string.loading)) }
-                evidenceError?.let { item { InlineNotice(it, Tone.Danger) } }
-                if (!evidenceLoading && evidenceError == null && evidence.isEmpty()) item {
-                    EmptyCard(stringResource(R.string.evidence_review), stringResource(R.string.no_review_evidence))
-                }
-                items(evidence, key = { it.id }) { review ->
-                    ClientEvidenceReviewCard(review) { target ->
-                        try {
-                            val uri = Uri.parse(target.download.url)
-                            if (uri.scheme != "https") throw IllegalArgumentException()
-                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                        } catch (_: Throwable) {
-                            evidenceError = context.getString(R.string.generic_request_error)
-                        }
-                    }
-                }
-            }
-            if (loaded.job.status == JobStatus.FUNDING) item {
-                Button(
-                    onClick = {
-                        scope.launch {
-                            actioning = true
-                            actionNotice = null
-                            try {
-                                val key = container.durableState.idempotencyKey("fund_job", jobId)
-                                val funding = container.marketplaceRepository.fundClientJob(jobId, key)
-                                val clientSecret = funding.clientSecret
-                                when {
-                                    clientSecret.isNullOrBlank() -> {
-                                        actioning = false
-                                        actionNotice = context.getString(R.string.funding_prepared)
-                                        reload()
-                                    }
-                                    !container.client.configuration.stripeConfigured -> {
-                                        actioning = false
-                                        actionNotice = context.getString(R.string.stripe_unconfigured)
-                                    }
-                                    paymentSheet == null -> {
-                                        actioning = false
-                                        actionNotice = context.getString(R.string.stripe_unconfigured)
-                                    }
-                                    else -> {
-                                        paymentSheet.presentWithPaymentIntent(
-                                            clientSecret,
-                                            PaymentSheet.Configuration.Builder(context.getString(R.string.app_name))
-                                                .allowsDelayedPaymentMethods(true)
-                                                .build(),
-                                        )
-                                    }
-                                }
-                            } catch (failure: Throwable) {
-                                actioning = false
-                                actionNotice = friendlyError(context, failure)
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !actioning,
-                ) {
-                    if (actioning) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(stringResource(if (actioning) R.string.payment_presenting else R.string.fund_escrow))
-                }
-            }
-            if (loaded.job.status == JobStatus.SUBMITTED) item {
-                Button(
-                    onClick = {
-                        scope.launch {
-                            actioning = true
-                            actionNotice = null
-                            try {
-                                val key = container.durableState.idempotencyKey("approve_job", jobId)
-                                val result = container.marketplaceRepository.approveClientJob(jobId, key)
-                                container.durableState.clearIdempotencyKey("approve_job", jobId)
-                                actionNotice = context.getString(R.string.approval_result, result.payoutStatus.name.lowercase())
-                                reload()
-                            } catch (failure: Throwable) {
-                                actionNotice = friendlyError(context, failure)
-                            } finally {
-                                actioning = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !actioning,
-                ) {
-                    Text(stringResource(R.string.approve_payout))
-                }
-            }
-            if (loaded.job.isUnfundedFunding()) item {
-                OutlinedButton(onClick = { showCancelDialog = true }, modifier = Modifier.fillMaxWidth(), enabled = !actioning) {
-                    Text(stringResource(R.string.cancel_job))
-                }
-            }
-            if (loaded.job.status == JobStatus.APPROVED) item {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            actioning = true
-                            try {
-                                val result = container.marketplaceRepository.completeClientJob(jobId)
-                                detail = loaded.copy(job = result.job)
-                                actionNotice = context.getString(R.string.job_action_result, result.action.lowercase())
-                                reload()
-                            } catch (failure: Throwable) {
-                                actionNotice = friendlyError(context, failure)
-                            } finally {
-                                actioning = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !actioning,
-                ) { Text(stringResource(R.string.complete_job)) }
-            }
-            if (loaded.job.status in DISPUTEABLE_JOB_STATUSES) item {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            actioning = true
-                            try {
-                                val result = container.marketplaceRepository.disputeClientJob(jobId)
-                                detail = loaded.copy(job = result.job)
-                                actionNotice = context.getString(R.string.job_action_result, result.action.lowercase())
-                                reload()
-                            } catch (failure: Throwable) {
-                                actionNotice = friendlyError(context, failure)
-                            } finally {
-                                actioning = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !actioning,
-                ) { Text(stringResource(R.string.dispute_job)) }
-            }
-            actionNotice?.let { item { InlineNotice(it, Tone.Neutral) } }
-        }
-    }
-    if (showCancelDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!actioning) showCancelDialog = false },
-            title = { Text(stringResource(R.string.cancel_job_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.cancel_job_body))
-                    OutlinedTextField(
-                        value = cancellationReason,
-                        onValueChange = { cancellationReason = it.take(1_000) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.cancellation_reason_optional)) },
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        scope.launch {
-                            actioning = true
-                            try {
-                                val result = container.marketplaceRepository.cancelClientJob(jobId, cancellationReason)
-                                detail = detail?.copy(job = result.job)
-                                actionNotice = context.getString(R.string.job_action_result, context.getString(R.string.cancel_job).lowercase())
-                                showCancelDialog = false
-                                reload()
-                            } catch (failure: Throwable) {
-                                actionNotice = friendlyError(context, failure)
-                            } finally {
-                                actioning = false
-                            }
-                        }
-                    },
-                    enabled = !actioning && (detail?.job?.isUnfundedFunding() == true),
-                ) { Text(stringResource(R.string.confirm_cancel)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCancelDialog = false }, enabled = !actioning) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            },
-        )
-    }
-}
-
-@Composable
-private fun ClientEvidenceReviewCard(item: ClientEvidenceReviewItem, onOpen: (ClientEvidenceReviewItem) -> Unit) {
-    Card(shape = MaterialTheme.shapes.medium) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(mediaTypeLabel(item.media_type), fontWeight = FontWeight.SemiBold)
-            Text(item.mime_type ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            item.file_size_bytes?.let { bytes ->
-                Text(stringResource(R.string.evidence_size_bytes, bytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            OutlinedButton(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.open_evidence))
             }
         }
     }
@@ -3890,6 +2796,69 @@ private fun NotificationPermissionCard() {
                 Text(stringResource(R.string.enable_notifications))
             }
         }
+    }
+}
+
+/**
+ * A client signed in to the worker app.
+ *
+ * Their account is real and their work is real -- it just happens somewhere
+ * else. Saying that plainly and offering the way out is more useful than a
+ * phone-sized copy of the client workspace, which is what used to be here.
+ */
+@Composable
+private fun WrongAppScreen(onSignOut: () -> Unit) {
+    val c = MaterialTheme.np
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Space.xl),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(c.fill),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Outlined.BusinessCenter,
+                contentDescription = null,
+                tint = c.inkMuted,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+        Spacer(Modifier.height(Space.xl))
+        Text(
+            text = stringResource(R.string.client_account_title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = c.ink,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Space.md))
+        Text(
+            text = stringResource(R.string.client_account_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = c.inkMuted,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Space.xl))
+        NpCard {
+            Text(
+                text = stringResource(R.string.client_account_url),
+                style = MaterialTheme.typography.titleSmall,
+                color = c.accent,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Spacer(Modifier.height(Space.xxl))
+        NpSecondaryButton(
+            label = stringResource(R.string.sign_out),
+            onClick = onSignOut,
+        )
     }
 }
 

@@ -1,8 +1,6 @@
 package com.networkpeer.mobile.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,13 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.BusinessCenter
-import androidx.compose.material.icons.outlined.Engineering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,11 +33,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.networkpeer.mobile.AppContainer
 import com.networkpeer.mobile.R
@@ -66,24 +60,27 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 /**
  * Sign-in and registration.
  *
- * The shape of these screens is dictated by the API, not by preference. A code
- * is requested with `POST /auth/email-otp/request {email, role}` and redeemed
- * with `POST /auth/email-otp/verify {email, otp, full_name?, mobile_number?}`.
- * The role is bound to the challenge when the code is issued and is rejected
- * on verify -- so the role has to be chosen *before* the email is sent, which
- * is exactly why the welcome screen asks for it first rather than burying it
- * in a form. The account is created on verify if the address is new, which is
- * why registering and signing in reach the same two endpoints and differ only
- * in whether a name and mobile number are collected.
+ * This app is for workers. Clients post and pay for jobs on the website, so
+ * nothing here asks which side someone is on: every code is requested as a
+ * WORKER, and an address that turns out to belong to a client is sent to the
+ * website rather than shown a client interface built for a phone.
+ *
+ * The rest of the shape is dictated by the API. A code is requested with
+ * `POST /auth/email-otp/request {email, role}` and redeemed with
+ * `POST /auth/email-otp/verify {email, otp, full_name?, mobile_number?}`. The
+ * role is bound to the challenge when the code is issued and rejected on
+ * verify, which is why it is sent at the first step. The account is created on
+ * verify if the address is new, which is why registering and signing in reach
+ * the same two endpoints and differ only in whether a name and mobile number
+ * are collected.
  */
 
 private enum class AuthMode { REGISTER, SIGN_IN }
 
 private sealed interface AuthStep {
     data object Welcome : AuthStep
-    data class Email(val role: UserRole, val mode: AuthMode) : AuthStep
+    data class Email(val mode: AuthMode) : AuthStep
     data class Code(
-        val role: UserRole,
         val mode: AuthMode,
         val email: String,
         val challengeId: String,
@@ -99,19 +96,19 @@ fun AuthFlow(container: AppContainer) {
             save = { s: AuthStep ->
                 when (s) {
                     is AuthStep.Welcome -> arrayListOf("welcome")
-                    is AuthStep.Email -> arrayListOf("email", s.role.name, s.mode.name)
+                    is AuthStep.Email -> arrayListOf("email", s.mode.name)
                     is AuthStep.Code -> arrayListOf(
-                        "code", s.role.name, s.mode.name, s.email,
+                        "code", s.mode.name, s.email,
                         s.challengeId, s.otpLength.toString(), s.developmentOtp ?: "",
                     )
                 }
             },
             restore = { v: ArrayList<String> ->
                 when (v.first()) {
-                    "email" -> AuthStep.Email(UserRole.valueOf(v[1]), AuthMode.valueOf(v[2]))
+                    "email" -> AuthStep.Email(AuthMode.valueOf(v[1]))
                     "code" -> AuthStep.Code(
-                        UserRole.valueOf(v[1]), AuthMode.valueOf(v[2]), v[3], v[4],
-                        v[5].toIntOrNull() ?: 6, v[6].ifBlank { null },
+                        AuthMode.valueOf(v[1]), v[2], v[3],
+                        v[4].toIntOrNull() ?: 6, v[5].ifBlank { null },
                     )
                     else -> AuthStep.Welcome
                 }
@@ -131,17 +128,15 @@ fun AuthFlow(container: AppContainer) {
     ) {
         when (val current = step) {
             is AuthStep.Welcome -> WelcomeScreen(
-                onChoose = { role, mode -> step = AuthStep.Email(role, mode) },
+                onStart = { mode -> step = AuthStep.Email(mode) },
             )
 
             is AuthStep.Email -> EmailScreen(
                 container = container,
-                role = current.role,
                 mode = current.mode,
                 onBack = { step = AuthStep.Welcome },
                 onCodeSent = { email, challengeId, otpLength, devOtp ->
                     step = AuthStep.Code(
-                        role = current.role,
                         mode = current.mode,
                         email = email,
                         challengeId = challengeId,
@@ -154,7 +149,7 @@ fun AuthFlow(container: AppContainer) {
             is AuthStep.Code -> CodeScreen(
                 container = container,
                 state = current,
-                onBack = { step = AuthStep.Email(current.role, current.mode) },
+                onBack = { step = AuthStep.Email(current.mode) },
             )
         }
     }
@@ -163,7 +158,7 @@ fun AuthFlow(container: AppContainer) {
 // --------------------------------------------------------------- welcome
 
 @Composable
-private fun WelcomeScreen(onChoose: (UserRole, AuthMode) -> Unit) {
+private fun WelcomeScreen(onStart: (AuthMode) -> Unit) {
     val c = MaterialTheme.np
     Column(
         Modifier
@@ -188,31 +183,30 @@ private fun WelcomeScreen(onChoose: (UserRole, AuthMode) -> Unit) {
         )
 
         Spacer(Modifier.height(Space.xxl))
-        Text(
-            text = stringResource(R.string.welcome_pick_role).uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = c.inkFaint,
+        HowItWorks(
+            step = "1",
+            title = stringResource(R.string.how_find_title),
+            body = stringResource(R.string.how_find_body),
         )
-        Spacer(Modifier.height(Space.md))
-
-        // The role is a real fork in the product, not a preference: it decides
-        // which half of the marketplace the account belongs to and cannot be
-        // changed after the code is sent. So it is asked plainly, once, here.
-        RoleChoice(
-            icon = Icons.Outlined.Engineering,
-            title = stringResource(R.string.role_worker_title),
-            body = stringResource(R.string.role_worker_body),
-            onClick = { onChoose(UserRole.WORKER, AuthMode.REGISTER) },
+        Spacer(Modifier.height(Space.lg))
+        HowItWorks(
+            step = "2",
+            title = stringResource(R.string.how_capture_title),
+            body = stringResource(R.string.how_capture_body),
         )
-        Spacer(Modifier.height(Space.md))
-        RoleChoice(
-            icon = Icons.Outlined.BusinessCenter,
-            title = stringResource(R.string.role_client_title),
-            body = stringResource(R.string.role_client_body),
-            onClick = { onChoose(UserRole.CLIENT, AuthMode.REGISTER) },
+        Spacer(Modifier.height(Space.lg))
+        HowItWorks(
+            step = "3",
+            title = stringResource(R.string.how_paid_title),
+            body = stringResource(R.string.how_paid_body),
         )
 
-        Spacer(Modifier.height(Space.xl))
+        Spacer(Modifier.height(Space.xxl))
+        NpPrimaryButton(
+            label = stringResource(R.string.auth_create_account),
+            onClick = { onStart(AuthMode.REGISTER) },
+        )
+        Spacer(Modifier.height(Space.lg))
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -225,44 +219,38 @@ private fun WelcomeScreen(onChoose: (UserRole, AuthMode) -> Unit) {
             )
             NpTextAction(
                 label = stringResource(R.string.sign_in_tab),
-                // Signing in still needs a role, because the code is issued
-                // against one. WORKER is the app's own audience; a client who
-                // signs in here reaches the same account either way, since the
-                // role on an existing account is not reassigned by a new code.
-                onClick = { onChoose(UserRole.WORKER, AuthMode.SIGN_IN) },
+                onClick = { onStart(AuthMode.SIGN_IN) },
             )
         }
+
+        Spacer(Modifier.height(Space.xl))
+        // Someone who posts jobs will otherwise install this, register, and
+        // find nothing they recognise. Saying so here costs one line.
+        Text(
+            text = stringResource(R.string.welcome_client_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = c.inkFaint,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(Space.xxl))
     }
 }
 
+/** One numbered step of what this app is for. */
 @Composable
-private fun RoleChoice(
-    icon: ImageVector,
-    title: String,
-    body: String,
-    onClick: () -> Unit,
-) {
+private fun HowItWorks(step: String, title: String, body: String) {
     val c = MaterialTheme.np
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(c.paper, shape)
-            .border(Size.hairline, c.hairline, shape)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(Space.lg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(verticalAlignment = Alignment.Top) {
         Box(
             Modifier
-                .size(44.dp)
+                .size(28.dp)
                 .background(c.fill, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = c.ink, modifier = Modifier.size(Size.iconLarge))
+            Text(step, style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
         }
-        Spacer(Modifier.width(Space.lg))
+        Spacer(Modifier.width(Space.md))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = c.ink)
             Spacer(Modifier.height(2.dp))
@@ -276,7 +264,6 @@ private fun RoleChoice(
 @Composable
 private fun EmailScreen(
     container: AppContainer,
-    role: UserRole,
     mode: AuthMode,
     onBack: () -> Unit,
     onCodeSent: (email: String, challengeId: String, otpLength: Int, devOtp: String?) -> Unit,
@@ -324,7 +311,7 @@ private fun EmailScreen(
                     try {
                         val result = container.authRepository.requestEmailOtp(
                             email = email.trim(),
-                            role = role,
+                            role = UserRole.WORKER,
                         )
                         onCodeSent(
                             email.trim(),
@@ -488,7 +475,7 @@ private fun CodeScreen(
                             try {
                                 val result = container.authRepository.requestEmailOtp(
                                     email = state.email,
-                                    role = state.role,
+                                    role = UserRole.WORKER,
                                 )
                                 // A resend issues a new challenge; redeeming
                                 // against the old id would fail as expired.

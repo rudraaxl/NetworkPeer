@@ -224,8 +224,8 @@
     </plurals>
 
     <!-- Welcome, sign-in and registration -->
-    <string name="welcome_headline">Get work done, or get paid to do it.</string>
-    <string name="welcome_body">NetworkPeer connects people who need field work verified with people nearby who can go and do it. Payment is held in escrow and released when the evidence is approved.</string>
+    <string name="welcome_headline">Work near you, paid on completion.</string>
+    <string name="welcome_body">Find field work close to you, photograph what you did, and get paid when the client approves it.</string>
     <string name="welcome_pick_role">Get started</string>
     <string name="role_worker_title">I want to work</string>
     <string name="role_worker_body">Find jobs near you, photograph the evidence, get paid.</string>
@@ -283,4 +283,16 @@
     <string name="approve">Approve</string>
     <string name="copy_text">Copy</string>
     <string name="copied">Copied</string>
+
+    <!-- Worker-only app: welcome, and the client who lands here by mistake -->
+    <string name="how_find_title">Find work nearby</string>
+    <string name="how_find_body">Browse jobs open right now and take the ones that suit you.</string>
+    <string name="how_capture_title">Capture the evidence</string>
+    <string name="how_capture_body">Photograph what you did on site. The app records where and when.</string>
+    <string name="how_paid_title">Get paid</string>
+    <string name="how_paid_body">The client’s payment is already held in escrow before you start.</string>
+    <string name="welcome_client_note">Posting jobs and paying for them happens on the NetworkPeer website.</string>
+    <string name="client_account_title">This account posts jobs</string>
+    <string name="client_account_body">You’re signed in as a client. Posting jobs, funding escrow and releasing payment all happen on the website — this app is for the people doing the work.</string>
+    <string name="client_account_url">dxzowp47k4wmy.cloudfront.net</string>
 </resources>
