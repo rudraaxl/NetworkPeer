@@ -25,6 +25,20 @@ import { api, ApiError, type Job } from "@/lib/api";
 import { PageHeader } from "@/components/shell/portal-shell";
 import { LocationPicker } from "@/components/location-picker";
 import { SectionCard, SuccessCheck } from "@/components/marketplace/primitives";
+import {
+  MAX_CHECKLIST_ITEMS,
+  PAGE_SIZE,
+  errorMessage,
+  formatFileSize,
+  inputCls,
+  jobCategories,
+  labelCls,
+  normalizeWholeAmount,
+  type AttachedFile,
+  type DraftSubtask,
+} from "@/lib/job-draft";
+import { useChecklistDraft } from "@/hooks/use-checklist-draft";
+import { ChecklistBuilder } from "@/components/client/checklist-builder";
 
 export const Route = createFileRoute("/client/jobs/new")({
   head: () => ({
@@ -40,47 +54,13 @@ export const Route = createFileRoute("/client/jobs/new")({
   component: CreateJob,
 });
 
-type DraftSubtask = {
-  id: number;
-  title: string;
-  instructions: string;
-  isRequired: boolean;
-};
-
-type AttachedFile = {
-  name: string;
-  size: number;
-  type: string;
-};
-
-const jobCategories = ["Audit", "Delivery", "Inspection", "Photography", "Retail", "Other"];
-const inputCls =
-  "w-full rounded-xl border border-border bg-card px-3.5 py-3 text-base outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/40";
-
-function labelCls() {
-  return "mb-1.5 block text-base font-medium";
-}
-
-function normalizeWholeAmount(value: string): string {
-  const digits = value.replace(/\D/g, "");
-  return digits.length === 0 ? "" : String(Number.parseInt(digits, 10));
-}
-
-const MAX_CHECKLIST_ITEMS = 5000;
-const PAGE_SIZE = 25;
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return `${error.code}: ${error.message}`;
-  return "Unable to post the job. Check your connection and try again.";
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function CreateJob() {
+  // The checklist owns nine pieces of state, nine callbacks and three
+  // derived values. They live in their own hook so the builder can be its
+  // own component without a twenty-four prop signature.
+  const checklist = useChecklistDraft();
+  const { items, summary: checklistSummary, setItems, setCountInput, setCurrentPage } = checklist;
   const router = useRouter();
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -103,26 +83,6 @@ function CreateJob() {
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Task Builder Mode (§24)
-  const [builderMode, setBuilderMode] = useState<"standard" | "book">("standard");
-  const [bookStartPage, setBookStartPage] = useState("1");
-  const [bookEndPage, setBookEndPage] = useState("20");
-  const [bookPagePrefix, setBookPagePrefix] = useState("Page");
-  const [bookRequireAll, setBookRequireAll] = useState(true);
-
-  // Subtasks State
-  const [items, setItems] = useState<DraftSubtask[]>([
-    {
-      id: 1,
-      title: "Capture storefront evidence",
-      instructions: "Capture the full signage and entrance.",
-      isRequired: true,
-    },
-  ]);
-  const [countInput, setCountInput] = useState(String(items.length));
-  const [taskSearch, setTaskSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-
   // Submission State
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "posted">("idle");
   const [createdJob, setCreatedJob] = useState<Job | null>(null);
@@ -133,146 +93,12 @@ function CreateJob() {
     [paymentInput],
   );
   const budgetCents = useMemo(() => paymentRupees * 100, [paymentRupees]);
-  const checklistSummary = useMemo(
-    () => ({
-      total: items.length,
-      required: items.filter((item) => item.isRequired).length,
-    }),
-    [items],
-  );
-
-  const updateSubtask = useCallback((id: number, patch: Partial<DraftSubtask>) => {
-    setItems((previous) => previous.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  }, []);
-
-  const removeSubtask = useCallback((id: number) => {
-    setItems((previous) => {
-      const next = previous.filter((item) => item.id !== id);
-      setCountInput(String(next.length));
-      return next;
-    });
-  }, []);
-
-  const addSubtask = useCallback(() => {
-    setItems((previous) => {
-      if (previous.length >= MAX_CHECKLIST_ITEMS) {
-        toast.error(`Maximum checklist limit of ${MAX_CHECKLIST_ITEMS} items reached.`);
-        return previous;
-      }
-      const next = [
-        ...previous,
-        { id: Date.now() + Math.floor(Math.random() * 1000), title: "", instructions: "", isRequired: true },
-      ];
-      setCountInput(String(next.length));
-      return next;
-    });
-  }, []);
-
-  const addMultipleSubtasks = useCallback((amount: number) => {
-    setItems((previous) => {
-      const remaining = MAX_CHECKLIST_ITEMS - previous.length;
-      if (remaining <= 0) {
-        toast.error(`Maximum checklist limit of ${MAX_CHECKLIST_ITEMS} reached.`);
-        return previous;
-      }
-      const toAdd = Math.min(amount, remaining);
-      const nextId = previous.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-      const added: DraftSubtask[] = Array.from({ length: toAdd }, (_, index) => ({
-        id: nextId + index,
-        title: "",
-        instructions: "",
-        isRequired: true,
-      }));
-      const next = [...previous, ...added];
-      setCountInput(String(next.length));
-      toast.success(`Added ${toAdd} checklist items.`);
-      return next;
-    });
-  }, []);
-
-  const resizeItems = useCallback((count: number) => {
-    const clamped = Math.max(
-      0,
-      Math.min(MAX_CHECKLIST_ITEMS, Math.floor(Number.isFinite(count) ? count : 0)),
-    );
-    setItems((previous) => {
-      if (clamped === previous.length) return previous;
-      if (clamped < previous.length) return previous.slice(0, clamped);
-      const nextId = previous.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-      const added = Array.from({ length: clamped - previous.length }, (_, index) => ({
-        id: nextId + index,
-        title: "",
-        instructions: "",
-        isRequired: true,
-      }));
-      return [...previous, ...added];
-    });
-    return clamped;
-  }, []);
-
-  const handleCountChange = useCallback(
-    (raw: string) => {
-      setCountInput(raw);
-      const clamped = resizeItems(Number.parseInt(raw, 10));
-      setCountInput(String(clamped));
-    },
-    [resizeItems],
-  );
 
   const handleBudgetChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setPaymentInput(normalizeWholeAmount(event.target.value));
   }, []);
 
   // Book Mode Generator (§24)
-  const handleGenerateBookPages = useCallback(() => {
-    const start = Number.parseInt(bookStartPage, 10);
-    const end = Number.parseInt(bookEndPage, 10);
-    if (!Number.isInteger(start) || start < 1) {
-      toast.error("Start page must be a positive integer (e.g. 1).");
-      return;
-    }
-    if (!Number.isInteger(end) || end < start) {
-      toast.error("End page must be greater than or equal to start page.");
-      return;
-    }
-    const pageCount = end - start + 1;
-    if (pageCount > MAX_CHECKLIST_ITEMS) {
-      toast.error(`Cannot generate more than ${MAX_CHECKLIST_ITEMS} pages at once.`);
-      return;
-    }
-
-    const prefix = bookPagePrefix.trim() || "Page";
-    const generated: DraftSubtask[] = [];
-    const baseId = Date.now();
-
-    for (let page = start; page <= end; page++) {
-      generated.push({
-        id: baseId + (page - start),
-        title: `${prefix} ${page}`,
-        instructions: `Capture a clear, well-lit photograph of ${prefix.toLowerCase()} ${page}. Verify all margins and text are sharp and legible.`,
-        isRequired: bookRequireAll,
-      });
-    }
-
-    setItems(generated);
-    setCountInput(String(generated.length));
-    setCurrentPage(1);
-    toast.success(`Generated ${pageCount} checklist tasks for ${prefix} ${start} to ${end}.`);
-  }, [bookEndPage, bookPagePrefix, bookRequireAll, bookStartPage]);
-
-  const markAllRequired = useCallback((required: boolean) => {
-    setItems((previous) => previous.map((item) => ({ ...item, isRequired: required })));
-    toast.success(required ? "All items marked required." : "All items marked optional.");
-  }, []);
-
-  const clearAllSubtasks = useCallback(() => {
-    setItems([]);
-    setCountInput("0");
-    setCurrentPage(1);
-    toast.info("Cleared all checklist items.");
-  }, []);
-
-  // File Upload Handlers
   const handleFileUpload = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
     const added: AttachedFile[] = [];
@@ -299,20 +125,6 @@ function CreateJob() {
   }, []);
 
   // Filtered & Paginated items for high-volume performance (§24)
-  const filteredItems = useMemo(() => {
-    if (!taskSearch.trim()) return items;
-    const q = taskSearch.toLowerCase();
-    return items.filter(
-      (item) => item.title.toLowerCase().includes(q) || item.instructions.toLowerCase().includes(q),
-    );
-  }, [items, taskSearch]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredItems.slice(start, start + PAGE_SIZE);
-  }, [currentPage, filteredItems]);
-
   const handleSubmit = useCallback(async () => {
     const normalizedTitle = title.trim();
     const normalizedDescription = description.trim();
@@ -704,279 +516,7 @@ function CreateJob() {
             </div>
           </SectionCard>
 
-          {/* Infinite Task Builder & Book Mode (§24) */}
-          <SectionCard
-            title="Checklist & task builder"
-            description="Infinite scaling task builder with Book / Sequential Mode for document verification."
-          >
-            {/* Mode Switcher */}
-            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-border bg-muted/20 p-1.5">
-              <button
-                type="button"
-                onClick={() => setBuilderMode("standard")}
-                className={cn(
-                  "press flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition",
-                  builderMode === "standard"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <CheckSquare className="h-4 w-4" /> Standard Checklist
-              </button>
-              <button
-                type="button"
-                onClick={() => setBuilderMode("book")}
-                className={cn(
-                  "press flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition",
-                  builderMode === "book"
-                    ? "bg-amber-400 text-slate-900 shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <BookOpen className="h-4 w-4" /> Book / Document Mode
-              </button>
-            </div>
-
-            {/* Book Mode Generator Panel */}
-            {builderMode === "book" && (
-              <div className="mb-4 space-y-4 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                  <h4 className="text-base font-semibold text-foreground">
-                    Auto-Generate Sequential Page Tasks
-                  </h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Quickly generate verification tasks for an entire document or book. Each page is added as an individually verifiable task with Devanagari/English script validation.
-                </p>
-
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                      Start Page
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={MAX_CHECKLIST_ITEMS}
-                      value={bookStartPage}
-                      onChange={(e) => setBookStartPage(e.target.value)}
-                      className={inputCls}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                      End Page
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={MAX_CHECKLIST_ITEMS}
-                      value={bookEndPage}
-                      onChange={(e) => setBookEndPage(e.target.value)}
-                      className={inputCls}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                      Prefix Label
-                    </span>
-                    <input
-                      type="text"
-                      value={bookPagePrefix}
-                      onChange={(e) => setBookPagePrefix(e.target.value)}
-                      placeholder="Page"
-                      className={inputCls}
-                    />
-                  </label>
-                  <div className="flex items-end">
-                    <button
-                      type="button"
-                      onClick={handleGenerateBookPages}
-                      className="press h-12 w-full rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-900 shadow-sm hover:bg-amber-300"
-                    >
-                      Generate Tasks
-                    </button>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={bookRequireAll}
-                    onChange={(e) => setBookRequireAll(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  <span>Mark all generated pages as strictly required for completion</span>
-                </label>
-              </div>
-            )}
-
-            {/* Quick Actions & High Volume Toolbar */}
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-muted/30 p-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Quick add:</span>
-                  <button
-                    type="button"
-                    onClick={() => addMultipleSubtasks(1)}
-                    className="press rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold hover:border-primary/40"
-                  >
-                    +1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addMultipleSubtasks(10)}
-                    className="press rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold hover:border-primary/40"
-                  >
-                    +10
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addMultipleSubtasks(50)}
-                    className="press rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold hover:border-primary/40"
-                  >
-                    +50
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => markAllRequired(true)}
-                    className="press rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium hover:border-primary/40"
-                  >
-                    Require all
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => markAllRequired(false)}
-                    className="press rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium hover:border-primary/40"
-                  >
-                    Optional all
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearAllSubtasks}
-                    className="press rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-destructive hover:border-destructive/40"
-                  >
-                    Clear all
-                  </button>
-                </div>
-              </div>
-
-              {/* Search & Pagination Info */}
-              {items.length > PAGE_SIZE && (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      type="text"
-                      value={taskSearch}
-                      onChange={(e) => {
-                        setTaskSearch(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      placeholder="Search tasks by title or instructions..."
-                      className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/40"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>
-                      Page {currentPage} of {totalPages} ({filteredItems.length} tasks)
-                    </span>
-                    <button
-                      type="button"
-                      disabled={currentPage <= 1}
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="press rounded-lg border border-border bg-card p-1.5 disabled:opacity-40"
-                      aria-label="Previous page"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={currentPage >= totalPages}
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="press rounded-lg border border-border bg-card p-1.5 disabled:opacity-40"
-                      aria-label="Next page"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Task Items List */}
-              {paginatedItems.map((item, index) => {
-                const actualIndex = (currentPage - 1) * PAGE_SIZE + index;
-                return (
-                  <div key={item.id} className="rounded-2xl border border-border bg-muted/30 p-4 transition-all">
-                    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-                      <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <p className="truncate text-[15px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Task {actualIndex + 1}
-                        {item.title && <span className="ml-2 lowercase text-foreground">— {item.title}</span>}
-                      </p>
-                      <button
-                        type="button"
-                        aria-label="Remove task"
-                        onClick={() => removeSubtask(item.id)}
-                        className="press grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="mt-3 grid gap-3">
-                      <input
-                        value={item.title}
-                        onChange={(event) => updateSubtask(item.id, { title: event.target.value })}
-                        className={inputCls}
-                        maxLength={255}
-                        placeholder="Task name (e.g. Page 1 or Signage)"
-                      />
-                      <textarea
-                        rows={2}
-                        value={item.instructions}
-                        onChange={(event) =>
-                          updateSubtask(item.id, { instructions: event.target.value })
-                        }
-                        className={inputCls}
-                        maxLength={2000}
-                        placeholder="Specific instructions for evidence capture"
-                      />
-                      <label className="flex items-center gap-2 text-base font-medium">
-                        <input
-                          type="checkbox"
-                          checked={item.isRequired}
-                          onChange={(event) =>
-                            updateSubtask(item.id, { isRequired: event.target.checked })
-                          }
-                        />
-                        Evidence required before task submission
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {items.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-border py-12 text-center text-muted-foreground">
-                  <CheckSquare className="mx-auto h-8 w-8 opacity-40" />
-                  <p className="mt-2 font-medium">No tasks defined yet.</p>
-                  <p className="text-sm">Add tasks using the buttons above or generate a book checklist.</p>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={addSubtask}
-                className="press flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-4 text-base font-medium text-muted-foreground hover:border-amber-400 hover:text-amber-500"
-              >
-                <Plus className="h-4 w-4" /> Add checklist item
-              </button>
-            </div>
-          </SectionCard>
+          <ChecklistBuilder draft={checklist} />
         </div>
 
         {/* Sidebar: Budget, Timing & Summary */}

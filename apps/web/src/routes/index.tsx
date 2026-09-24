@@ -5,6 +5,7 @@ import {
   Fingerprint,
   Gauge,
   LayoutDashboard,
+  Smartphone,
   MapPin,
   ShieldCheck,
   Wallet,
@@ -243,16 +244,24 @@ function Landing() {
                 Open client portal <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-            <dl className="mt-10 grid max-w-lg grid-cols-3 gap-4">
+            {/* This was three statistics -- "12.4k jobs completed", "4.87 avg
+                rating", "99.2% evidence verified" -- written as string
+                literals. The platform has completed no jobs and holds no
+                ratings, so they were the front page making the same kind of
+                claim the app was making with its "98% reliability" badge.
+                What the product guarantees is true on day one; how much of it
+                has happened is not something to invent. Wire these to real
+                counts when there are some. */}
+            <dl className="mt-10 grid max-w-lg gap-4 sm:grid-cols-3">
               {[
-                ["12.4k", "Jobs completed"],
-                ["4.87", "Avg. rating"],
-                ["99.2%", "Evidence verified"],
+                ["Escrow first", "Funded before a worker is dispatched"],
+                ["Proof on site", "GPS- and time-stamped capture, in app"],
+                ["Anonymous", "Identities withheld until acceptance"],
               ].map(([value, label], index) => (
-                <Reveal key={label} delay={index * 120}>
-                  <div className="hover-lift rounded-2xl border border-border bg-card p-4 shadow-soft">
-                    <dt className="text-xs text-muted-foreground">{label}</dt>
-                    <dd className="mt-1 text-2xl font-semibold">{value}</dd>
+                <Reveal key={value} delay={index * 120}>
+                  <div className="hover-lift h-full rounded-2xl border border-border bg-card p-4 shadow-soft">
+                    <dt className="text-sm font-semibold">{value}</dt>
+                    <dd className="mt-1 text-xs leading-relaxed text-muted-foreground">{label}</dd>
                   </div>
                 </Reveal>
               ))}
@@ -340,6 +349,27 @@ function Landing() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* A signpost, not a portal. Workers have no account area on this site,
+          but they arrive here looking for one -- and the page previously
+          offered them a card that led to a page explaining it did not exist. */}
+      <section className="mx-auto max-w-7xl px-4 pb-4 sm:px-6">
+        <div className="flex flex-col items-start gap-4 rounded-2xl border border-border bg-card p-6 shadow-soft sm:flex-row sm:items-center">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+            <Smartphone className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold">Looking for work?</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Jobs are found and evidence is captured in the NetworkPeers Android app — this site is
+              where clients post the work and pay for it.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground">
+            Android app — coming to Play Store
+          </span>
         </div>
       </section>
 

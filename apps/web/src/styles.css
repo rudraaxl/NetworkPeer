@@ -19,7 +19,11 @@
   --radius-4xl: calc(var(--radius) + 16px);
 
   --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-  --font-display: "Space Grotesk", "Plus Jakarta Sans", sans-serif;
+  /* One family, not two. Plus Jakarta Sans and Space Grotesk are both
+     geometric sans with similar proportions, so pairing them gave weak
+     contrast for the cost of a second webfont -- and the Android app sets
+     everything in Plus Jakarta Sans. Display weight carries the difference. */
+  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -135,27 +139,31 @@
   --glass-border: color-mix(in oklab, oklch(1 0 0) 70%, transparent);
 }
 
+/* Neutral darks. The incoming palette set teal on teal throughout -- a
+   #051316 ground under #e6fffb text -- which read as a themed surface and
+   left the accent nothing to stand out against. The greys are neutral with
+   a trace of the brand hue; teal now appears only where it means something. */
 .dark {
-  --background: #051316;
-  --foreground: #e6fffb;
-  --card: #081d22;
-  --card-foreground: #e6fffb;
-  --popover: #081d22;
-  --popover-foreground: #e6fffb;
+  --background: #0C0E0F;
+  --foreground: #F1F3F3;
+  --card: #16191A;
+  --card-foreground: #F1F3F3;
+  --popover: #16191A;
+  --popover-foreground: #F1F3F3;
 
   --primary: #14b8a6;
   --primary-foreground: #032b2e;
-  --primary-soft: #123f43;
+  --primary-soft: #0F2E2B;
 
-  --secondary: #0e3035;
-  --secondary-foreground: #d9fffa;
+  --secondary: #1E2223;
+  --secondary-foreground: #E4E8E8;
   --brand-teal: #2dd4bf;
   --brand-teal-foreground: #042f2e;
 
-  --muted: #0e3035;
-  --muted-foreground: #8ab7b8;
-  --accent: #123f43;
-  --accent-foreground: #e6fffb;
+  --muted: #1E2223;
+  --muted-foreground: #9AA3A4;
+  --accent: #1E2223;
+  --accent-foreground: #F1F3F3;
 
   --destructive: oklch(0.65 0.21 25.3);
   --destructive-foreground: oklch(0.99 0.003 247.9);
@@ -166,17 +174,17 @@
   --info: oklch(0.66 0.13 240);
   --info-foreground: oklch(0.12 0.03 240);
 
-  --border: #134e54;
-  --input: #1b5960;
+  --border: #282D2E;
+  --input: #333839;
   --ring: #2dd4bf;
 
-  --sidebar: #071a1e;
-  --sidebar-foreground: #d9fffa;
+  --sidebar: #111415;
+  --sidebar-foreground: #E4E8E8;
   --sidebar-primary: #14b8a6;
   --sidebar-primary-foreground: #032b2e;
-  --sidebar-accent: #0e3035;
-  --sidebar-accent-foreground: #e6fffb;
-  --sidebar-border: #0e3d42;
+  --sidebar-accent: #1E2223;
+  --sidebar-accent-foreground: #F1F3F3;
+  --sidebar-border: #282D2E;
   --sidebar-ring: #2dd4bf;
 
   --shadow-soft: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px -12px oklch(0 0 0 / 0.6);
@@ -223,9 +231,9 @@
   h2,
   h3,
   h4 {
-    letter-spacing: -0.025em;
+    letter-spacing: -0.028em;
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: 800;
   }
 }
 
