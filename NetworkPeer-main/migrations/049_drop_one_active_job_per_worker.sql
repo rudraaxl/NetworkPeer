@@ -1,0 +1,34 @@
+-- @nontransactional
+-- Migration 049: finish what 048 started.
+--
+-- 048 stopped accept_job from clearing worker_profiles.is_available, on the
+-- understanding that this was what limited a worker to one job. It was only
+-- half of it. Migration 010 also made the limit a schema invariant:
+--
+--   CREATE UNIQUE INDEX idx_jobs_one_active_job_per_worker
+--     ON jobs (worker_id)
+--     WHERE worker_id IS NOT NULL
+--       AND status IN ('ASSIGNED','EN_ROUTE','AT_LOCATION','IN_PROGRESS',
+--                      'SUBMITTED','APPROVED','DISPUTED');
+--
+-- so a second claim failed on a unique violation rather than on any of
+-- accept_job's own guards -- SQLSTATE 23505, reported as "Job is no longer
+-- available", which is why it survived a round of error-message work without
+-- being identified. Note how wide the predicate is: SUBMITTED and APPROVED
+-- count as active, so a worker was blocked for as long as a client took to
+-- review their evidence, which could be days.
+--
+-- Dropping the index is the whole change. Nothing else depended on it: it was
+-- never a foreign key target and no query uses it for lookup, because a unique
+-- index on worker_id filtered to active statuses answers no question the
+-- application asks.
+--
+-- WHAT THIS GIVES UP: there is now no invariant stopping a worker from holding
+-- any number of jobs at once. That was a real protection -- against a worker
+-- hoarding work they cannot deliver, and against a client's escrow sitting
+-- against an assignment nobody is travelling to. If a limit is wanted later it
+-- should be a policy with a number behind it, applied where it can be
+-- explained to the worker, rather than a unique index that surfaces as a
+-- duplicate-key error.
+
+DROP INDEX CONCURRENTLY IF EXISTS idx_jobs_one_active_job_per_worker;

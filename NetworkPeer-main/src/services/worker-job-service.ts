@@ -136,6 +136,16 @@ function claimFailure(err: unknown, workerAvailable = true): WorkerJobServiceErr
       409,
     );
   }
+  if (message.includes("idx_jobs_one_active_job_per_worker")) {
+    // Dropped in migration 049, but a database that has not had it applied
+    // still enforces it, and "duplicate key value violates unique constraint"
+    // is not something to show a worker.
+    return new WorkerJobServiceError(
+      "WORKER_ALREADY_ON_A_JOB",
+      "You already have a job in progress. Finish or submit it before taking another.",
+      409,
+    );
+  }
   if (message.includes("owner changed")) {
     return new WorkerJobServiceError(
       "JOB_CHANGED",
