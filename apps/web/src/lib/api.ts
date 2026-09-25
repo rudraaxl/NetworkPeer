@@ -321,6 +321,14 @@ export type OtpRequestResult = {
   challenge_id?: string;
   challengeId?: string;
   delivery?: { transport: "sms" | "email" | "log"; to?: string };
+  /**
+   * The code itself, echoed back by the API when it is not running with
+   * NODE_ENV=production, so a tester without inbox access can still get in.
+   * The field is named development_otp on the wire; this was declared as
+   * `otp`, so it never once arrived -- the same mistake the Android model
+   * had, and the reason the convenience was never available on either client.
+   */
+  development_otp?: string;
   otp?: string;
   success?: boolean;
   message?: string;

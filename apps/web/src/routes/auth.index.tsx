@@ -37,6 +37,8 @@ export type PendingOtp = {
   challengeId?: string;
   fullName?: string;
   mobileNumber?: string;
+  /** Present only when the API is not in production. See OtpRequestResult. */
+  developmentOtp?: string;
 };
 
 export const PENDING_OTP_KEY = "networkpeer-pending-otp";
@@ -98,6 +100,7 @@ function AuthPage() {
         otpLength: result.otp_length ?? result.otpLength ?? 6,
         fullName: trimmedName || undefined,
         mobileNumber: parsedMobile || undefined,
+        developmentOtp: result.development_otp,
       };
       window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(pending));
       toast.success("Verification code sent to your email");

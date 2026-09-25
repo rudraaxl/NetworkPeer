@@ -124,7 +124,12 @@ function VerifyOtpPage() {
       if (result) {
         setPending((current) => {
           if (!current) return current;
-          const next = { ...current, otpLength: result.otp_length, challengeId: result.challenge_id };
+          const next = {
+            ...current,
+            otpLength: result.otp_length,
+            challengeId: result.challenge_id,
+            developmentOtp: result.development_otp,
+          };
           window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(next));
           return next;
         });
@@ -315,6 +320,35 @@ function VerifyOtpPage() {
             </p>
           </div>
         </div>
+        {/*
+          Shown only when the API echoed the code back, which it does when it
+          is not running with NODE_ENV=production. The site renders whatever
+          it is given, so this disappears by itself the moment the API is set
+          to production -- exactly how the Android app handles it.
+        */}
+        {pending?.developmentOtp && (
+          <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Development code
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The API is not running in production mode, so it returned the code
+              instead of relying on the email arriving.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setOtp(pending.developmentOtp ?? "");
+                setError("");
+              }}
+              className="press mt-3 rounded-lg border border-amber-500/40 bg-background px-3 py-2 font-mono text-lg font-bold tracking-[0.3em]"
+            >
+              {pending.developmentOtp}
+            </button>
+            <p className="mt-2 text-xs text-muted-foreground">Tap the code to fill it in.</p>
+          </div>
+        )}
+
         <div className="mt-6">
           <label className="text-sm font-medium text-foreground">
             Enter {pending?.otpLength ?? 6}-digit code
