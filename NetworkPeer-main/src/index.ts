@@ -2,6 +2,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
+import { createHash } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
 import { config } from "./config.js";
 import { pool, redis, closeConnections } from "./db.js";
@@ -118,7 +119,23 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     hook: "onRequest",
     max: config.RATE_LIMIT_MAX_REQUESTS,
     timeWindow: config.RATE_LIMIT_WINDOW_MS,
-    keyGenerator: (request) => request.ip,
+    // Keyed by session where there is one, falling back to IP.
+    //
+    // Keying on IP alone meant every worker behind the same NAT shared a
+    // single 100-per-minute budget. On mobile networks that is not an edge
+    // case -- carrier-grade NAT routinely puts thousands of subscribers
+    // behind one address -- so a busy area could rate-limit workers who had
+    // sent almost nothing. The limiter runs on the global onRequest hook,
+    // before route-level authentication, so request.auth is not populated
+    // yet; the bearer token is hashed instead, which separates sessions
+    // without the token itself ever becoming a cache key.
+    keyGenerator: (request) => {
+      const authorization = request.headers.authorization;
+      if (authorization?.startsWith("Bearer ")) {
+        return `session:${createHash("sha256").update(authorization.slice(7)).digest("hex").slice(0, 32)}`;
+      }
+      return `ip:${request.ip}`;
+    },
     // Liveness must remain dependency-free for container orchestration.
     allowList: (request) => request.url.split("?", 1)[0] === `${config.API_PREFIX}/live`,
     skipOnError: false,

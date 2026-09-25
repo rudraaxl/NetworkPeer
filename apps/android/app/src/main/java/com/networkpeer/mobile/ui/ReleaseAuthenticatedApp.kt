@@ -210,6 +210,9 @@ enum class AppNavTab {
  * or already settled, and belongs in Earnings rather than at the top of the
  * feed. CANCELLED and DISPUTED are excluded for the same reason.
  */
+/** How often the app will tell the server where the worker is. */
+private const val LOCATION_POST_INTERVAL_MS = 60_000L
+
 private val ACTIVE_WORKER_STATUSES = listOf(
     JobStatus.ASSIGNED,
     JobStatus.EN_ROUTE,
@@ -1259,18 +1262,30 @@ private fun WorkerDiscoveryScreen(
             .sortedBy { ACTIVE_WORKER_STATUSES.indexOf(it.status) }
     }
 
+    var lastLocationPostMs by remember { mutableStateOf(0L) }
+
     suspend fun loadJobs(reset: Boolean = true) {
         if (loading && !reset) return
         loading = true
         error = null
         try {
-            try {
-                val location = container.currentOrLastLocation()
-                if (location != null) {
-                    container.marketplaceRepository.updateWorkerLocation(location.latitude, location.longitude)
-                    reconcileSafely(container)
-                }
-            } catch (_: Throwable) {}
+            // The server treats a fix older than 15 minutes as stale and will
+            // not let a job be accepted, so this has to happen -- but it used
+            // to happen on every load, including pagination, where the
+            // worker has not moved and nothing needs saying. Combined with
+            // the global 100-requests-per-minute limit that produced 429s on
+            // exactly the call whose failure quietly ages the fix toward
+            // staleness. Once a minute keeps it fresh with room to spare.
+            if (reset && System.currentTimeMillis() - lastLocationPostMs > LOCATION_POST_INTERVAL_MS) {
+                try {
+                    val location = container.currentOrLastLocation()
+                    if (location != null) {
+                        container.marketplaceRepository.updateWorkerLocation(location.latitude, location.longitude)
+                        lastLocationPostMs = System.currentTimeMillis()
+                        reconcileSafely(container)
+                    }
+                } catch (_: Throwable) {}
+            }
             // NP-15: when both calls failed this substituted a hardcoded job
             // list, so an outage looked like available work. The failure now
             // reaches the catch below and is shown to the worker.
