@@ -250,26 +250,35 @@ internal fun statusLabel(status: JobStatus): String = stringResource(
 )
 
 internal fun friendlyError(context: Context, failure: Throwable): String {
-    android.util.Log.e("NetworkPeer", "API error encountered: ${failure.message}", failure)
+    val logCode = (failure as? NetworkPeerApiException)?.let { "${it.code}/${it.statusCode} " } ?: ""
+    android.util.Log.e("NetworkPeer", "API error: $logCode${failure.message}", failure)
     return when (failure) {
-        is NetworkPeerApiException -> when {
-            failure.statusCode == 401 || failure.code.contains("401", ignoreCase = true) ->
-                "Invalid verification code. Please check the 6-digit code sent to your email."
-            failure.statusCode == 403 || failure.code.contains("403", ignoreCase = true) ->
-                "Action not authorized. Role approval required from admin."
-            failure.statusCode == 404 || failure.code.contains("404", ignoreCase = true) ->
-                "The requested profile or resource could not be found."
-            failure.statusCode == 409 ->
-                "This action has already been performed."
-            failure.statusCode == 429 ->
-                "Too many attempts. Please wait a minute and try again."
-            failure.statusCode in 500..599 ->
-                "Service temporarily unavailable. Please try again shortly."
-            else -> "Unable to complete request. Please check your connection and try again."
+        is NetworkPeerApiException -> {
+            // The API writes these for the person reading them: "We need your
+            // current location before you can accept work", "This job is
+            // outside the distance you have chosen to work within". Replacing
+            // them with a sentence built from the status code is how a worker
+            // with a stale GPS fix came to be told they had already taken the
+            // job -- and how an upload that failed on a missing S3 permission
+            // showed up as a bare 500. Use what the server said.
+            val fromServer = failure.message.takeIf {
+                it.isNotBlank() && !it.startsWith("The server rejected the request")
+            }
+            fromServer ?: when {
+                failure.statusCode == 401 ->
+                    "Invalid verification code. Please check the 6-digit code sent to your email."
+                failure.statusCode == 403 -> "You are not allowed to do that."
+                failure.statusCode == 404 -> "The requested profile or resource could not be found."
+                failure.statusCode == 429 -> "Too many attempts. Please wait a minute and try again."
+                failure.statusCode in 500..599 ->
+                    "Service temporarily unavailable. Please try again shortly."
+                else -> "Unable to complete request. Please check your connection and try again."
+            }
         }
         else -> context.getString(R.string.generic_request_error)
     }
 }
+
 
 internal fun formatMoney(cents: Long, currency: String): String {
     if (currency.equals("INR", ignoreCase = true)) {

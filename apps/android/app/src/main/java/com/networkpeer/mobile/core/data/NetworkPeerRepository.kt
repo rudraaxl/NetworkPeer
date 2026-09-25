@@ -48,6 +48,9 @@ import com.networkpeer.mobile.core.network.NetworkPeerClient
 import retrofit2.HttpException
 import java.io.IOException
 import java.util.concurrent.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import com.networkpeer.mobile.core.model.ApiEnvelope
 
 class AuthRepository(
     private val api: NetworkPeerApi,
@@ -296,10 +299,36 @@ class MarketplaceRepository(
     }
 }
 
+/**
+ * Reads the API's own explanation out of a failed response.
+ *
+ * Every non-2xx used to be turned into "The server rejected the request (409)."
+ * without the body being opened, so the reason never reached the app at all.
+ * The API had been saying exactly what was wrong the whole time -- that a
+ * worker's location was stale, that a job was out of range, that an upload
+ * failed on an S3 permission -- and all of it was discarded at this line in
+ * favour of a sentence assembled from the status code.
+ */
+private fun parseApiError(error: HttpException): NetworkPeerApiException? {
+    val body = runCatching { error.response()?.errorBody()?.string() }.getOrNull()
+    if (body.isNullOrBlank()) return null
+    val envelope = runCatching {
+        Json { ignoreUnknownKeys = true; explicitNulls = false }
+            .decodeFromString(ApiEnvelope.serializer(JsonElement.serializer()), body)
+    }.getOrNull() ?: return null
+    val apiError = envelope.error ?: return null
+    return NetworkPeerApiException(apiError.code, apiError.message, error.code())
+}
+
 private suspend fun <T> apiCall(request: suspend () -> com.networkpeer.mobile.core.model.ApiEnvelope<T>): T = try {
     request().requireData()
 } catch (error: HttpException) {
-    throw NetworkPeerApiException("HTTP_${error.code()}", "The server rejected the request (${error.code()}).", error.code())
+    throw parseApiError(error)
+        ?: NetworkPeerApiException(
+            "HTTP_${error.code()}",
+            "The server rejected the request (${error.code()}).",
+            error.code(),
+        )
 } catch (error: IOException) {
     throw NetworkPeerApiException("NETWORK_ERROR", "Cannot reach NetworkPeer. Check your connection and try again.")
 }

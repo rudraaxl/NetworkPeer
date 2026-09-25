@@ -4,6 +4,7 @@
  */
 
 import { config } from "../config.js";
+import { logger } from "../observability.js";
 import type { Point, WorkerJobDetail, WorkerJobSummary } from "../contracts.js";
 import {
   acceptJobForWorker,
@@ -111,6 +112,42 @@ function claimFailure(err: unknown, workerAvailable = true): WorkerJobServiceErr
       409,
     );
   }
+  if (message.includes("does not exist") || message.includes("job not found")) {
+    return new WorkerJobServiceError("JOB_NOT_FOUND", "That job no longer exists.", 404);
+  }
+  if (message.includes("client is not active")) {
+    return new WorkerJobServiceError(
+      "CLIENT_INACTIVE",
+      "The client who posted this job is no longer active, so it cannot be accepted.",
+      409,
+    );
+  }
+  if (message.includes("worker is not active")) {
+    return new WorkerJobServiceError("WORKER_INACTIVE", "Your account is not active.", 403);
+  }
+  // Raised by the enforce_job_financial_state trigger on the UPDATE inside
+  // accept_job, not by accept_job's own guards -- which is why it reached the
+  // fallback: its SQLSTATE (23514) is handled but its wording matches none of
+  // the checks above.
+  if (message.includes("escrow hold") || message.includes("escrow settlement")) {
+    return new WorkerJobServiceError(
+      "ESCROW_NOT_HELD",
+      "This job's payment is not being held in escrow, so it cannot be started.",
+      409,
+    );
+  }
+  if (message.includes("owner changed")) {
+    return new WorkerJobServiceError(
+      "JOB_CHANGED",
+      "This job changed while you were accepting it. Refresh and try again.",
+      409,
+    );
+  }
+  // Nothing matched. The message is ours, from our own migrations, so this
+  // means a new one was added without a case here -- log it rather than let
+  // the worker see a sentence that describes none of the real causes. Every
+  // unexplained failure in this system so far has been one of these.
+  logger.warn({ dbMessage: databaseErrorMessage(err) }, "unmapped job claim failure");
   return new WorkerJobServiceError("JOB_NOT_AVAILABLE", "Job is no longer available", 409);
 }
 
