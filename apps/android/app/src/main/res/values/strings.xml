@@ -295,4 +295,6 @@
     <string name="client_account_title">This account posts jobs</string>
     <string name="client_account_body">You’re signed in as a client. Posting jobs, funding escrow and releasing payment all happen on the website — this app is for the people doing the work.</string>
     <string name="client_account_url">dxzowp47k4wmy.cloudfront.net</string>
+
+    <string name="mobile_number">Mobile number</string>
 </resources>
