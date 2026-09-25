@@ -68,8 +68,21 @@ function databaseErrorMessage(err: unknown): string {
  * our own migration, and giving each one its own SQLSTATE would mean rewriting
  * the function. The fallback stays correct if one is ever reworded.
  */
-function claimFailure(err: unknown): WorkerJobServiceError {
+function claimFailure(err: unknown, workerAvailable = true): WorkerJobServiceError {
   const message = databaseErrorMessage(err).toLowerCase();
+  // "Job is not claimable" covers three conditions at once, and one of them is
+  // about the worker rather than the job. Since migration 048 that is no
+  // longer "you already hold a job" -- holding one is fine -- but a worker can
+  // still be unavailable because they turned themselves off or an
+  // administrator suspended them. Reporting either as "someone else has taken
+  // it" sends them to look at the wrong thing entirely.
+  if (!workerAvailable && message.includes("not claimable")) {
+    return new WorkerJobServiceError(
+      "WORKER_UNAVAILABLE",
+      "Your account is marked unavailable for work, so jobs cannot be accepted.",
+      409,
+    );
+  }
   if (message.includes("location is missing or stale")) {
     return new WorkerJobServiceError(
       "WORKER_LOCATION_REQUIRED",
@@ -259,13 +272,13 @@ export class WorkerJobService {
   }
 
   async accept(workerId: string, jobId: string): Promise<WorkerJobDetail> {
-    await this.requireVerifiedWorker(workerId);
+    const profile = await this.requireVerifiedWorker(workerId);
     try {
       await acceptJobForWorker(jobId, workerId);
     } catch (err) {
       const code = databaseErrorCode(err);
       if (code === "22000" || code === "55000" || code === "23514" || code === "23505") {
-        throw claimFailure(err);
+        throw claimFailure(err, profile.isAvailable);
       }
       throw err;
     }
