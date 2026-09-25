@@ -4,6 +4,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Where the map opens when it has nothing better.
+ *
+ * It used to open here unconditionally, and because the address box and the pin
+ * were independent, a client could type "noida", never touch the map, and post
+ * a job whose stored coordinates were a tap somewhere near Bengaluru -- 1,700km
+ * from the address they had written. The worker radius search uses the
+ * coordinates, so the job was invisible to everyone near it.
+ *
+ * The map now asks the browser for a real position on mount and only falls back
+ * to this if that is refused or unavailable.
+ */
 const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946]; // Bengaluru
 const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTR =
@@ -24,11 +36,14 @@ export function LocationPicker({
   lat,
   lng,
   onPick,
+  onResolveAddress,
   className,
 }: {
   lat: number | null;
   lng: number | null;
   onPick: (lat: number, lng: number) => void;
+  /** Called with a human-readable address whenever one is resolved for the pin. */
+  onResolveAddress?: (address: string) => void;
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -37,6 +52,10 @@ export function LocationPicker({
   const leafletRef = useRef<LeafletModule | null>(null);
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
+  const onResolveAddressRef = useRef(onResolveAddress);
+  onResolveAddressRef.current = onResolveAddress;
+  // The map effect binds its click handler before describePoint is declared.
+  const describePointRef = useRef<((lat: number, lng: number) => Promise<void>) | null>(null);
 
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -87,10 +106,28 @@ export function LocationPicker({
         const { lat: nextLat, lng: nextLng } = event.latlng;
         syncMarker(L, instance, nextLat, nextLng);
         onPickRef.current(nextLat, nextLng);
+        void describePointRef.current?.(nextLat, nextLng);
       });
 
       if (lat !== null && lng !== null) {
         syncMarker(L, instance, lat, lng);
+      } else if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+        // Open where the client actually is. Without this the map sits on
+        // DEFAULT_CENTER and a job posted without touching it lands there --
+        // which is how a job addressed "noida" ended up stored in Andhra
+        // Pradesh, and invisible to every worker near Noida.
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (disposed) return;
+            const { latitude, longitude } = position.coords;
+            instance.setView([latitude, longitude], 14);
+            setStatus("Map centred on your location — tap to place the job pin.");
+          },
+          () => {
+            if (!disposed) setStatus("Search an address or tap the map to set the job location.");
+          },
+          { enableHighAccuracy: false, timeout: 8_000, maximumAge: 300_000 },
+        );
       }
     });
 
@@ -100,6 +137,30 @@ export function LocationPicker({
       markerRef.current = null;
     };
   }, [lat, lng, syncMarker]);
+
+
+  /**
+   * Name the pin. A map tap produces coordinates and nothing else, so without
+   * this the client is left to type an address that nothing checks against it.
+   */
+  const describePoint = useCallback(async (nextLat: number, nextLng: number) => {
+    if (!onResolveAddressRef.current) return;
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${nextLat}&lon=${nextLng}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!response.ok) return;
+      const body = (await response.json()) as { display_name?: string };
+      if (body.display_name) {
+        onResolveAddressRef.current(body.display_name);
+        setStatus(body.display_name);
+      }
+    } catch {
+      // The pin is still valid without a name; the client can type one.
+    }
+  }, []);
+  describePointRef.current = describePoint;
 
   const runSearch = useCallback(async () => {
     const q = query.trim();
@@ -128,6 +189,7 @@ export function LocationPicker({
         syncMarker(leafletRef.current, mapRef.current, nextLat, nextLng);
       }
       onPickRef.current(nextLat, nextLng);
+      onResolveAddressRef.current?.(first.display_name);
       setStatus(first.display_name);
     } catch {
       setStatus("Address search is unavailable right now — tap the map instead.");
@@ -153,6 +215,7 @@ export function LocationPicker({
         onPickRef.current(nextLat, nextLng);
         setStatus("Location set from your device.");
         setLocating(false);
+        void describePoint(nextLat, nextLng);
       },
       () => {
         setStatus("Could not read your location — search an address or tap the map.");
@@ -160,7 +223,7 @@ export function LocationPicker({
       },
       { enableHighAccuracy: true, timeout: 10_000 },
     );
-  }, [syncMarker]);
+  }, [syncMarker, describePoint]);
 
   return (
     <div className={cn("space-y-2.5", className)}>

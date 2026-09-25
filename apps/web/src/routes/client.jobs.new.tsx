@@ -345,6 +345,14 @@ function CreateJob() {
                   lat={location?.lat ?? null}
                   lng={location?.lng ?? null}
                   onPick={(nextLat, nextLng) => setLocation({ lat: nextLat, lng: nextLng })}
+                  // The address field and the pin used to be unrelated pieces of
+                  // state, so "noida" could be saved against coordinates 1,700km
+                  // away and nothing objected. The pin now fills the address
+                  // whenever the client has not written one themselves -- their
+                  // own words are never overwritten.
+                  onResolveAddress={(resolved) => {
+                    setAddress((current) => (current.trim() ? current : resolved));
+                  }}
                 />
               </label>
               <label>
