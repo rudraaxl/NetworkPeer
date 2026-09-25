@@ -25,7 +25,7 @@ import {
   SectionCard,
   SuccessCheck,
 } from "@/components/marketplace/primitives";
-import { EvidenceMedia } from "@/components/client/evidence-viewer";
+import { EvidenceDownloadButton, EvidenceMedia } from "@/components/client/evidence-viewer";
 import { api, ApiError, type EvidenceSummary, type Job } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 
@@ -60,11 +60,18 @@ function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const approvalKeyRef = useRef<string | null>(null);
 
+  // Two calls, because /client/jobs/:jobId/evidence returns evidence only.
+  // This used to read result.job from that response, which does not exist, so
+  // `job` was always undefined and the page rendered "Job not found." every
+  // time -- the whole review screen, not merely the gallery.
   const loadEvidence = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await api.clientJobEvidence(jobId);
-      setJob(result.job);
+      const [detail, result] = await Promise.all([
+        api.clientJob(jobId),
+        api.clientJobEvidence(jobId),
+      ]);
+      setJob(detail.job);
       setEvidence(result.evidence);
       setError(null);
     } catch (requestError) {
@@ -90,18 +97,6 @@ function ReviewPage() {
       setIsApproving(false);
     }
   }, [jobId, loadEvidence]);
-
-  const downloadEvidence = useCallback(
-    async (mediaId: string) => {
-      try {
-        const { url } = await api.clientEvidenceDownloadUrl(jobId, mediaId);
-        window.open(url, "_blank", "noopener,noreferrer");
-      } catch (requestError) {
-        setError(errorMessage(requestError));
-      }
-    },
-    [jobId],
-  );
 
   const openDispute = useCallback(async () => {
     setIsDisputing(true);
@@ -246,18 +241,12 @@ function ReviewPage() {
                             {item.status.replaceAll("_", " ")}
                           </Chip>
                           {(item.status === "UPLOADED" || item.status === "VERIFIED") && (
-                            <button
-                              type="button"
-                              onClick={() => void downloadEvidence(item.id)}
-                              className="press rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm font-medium"
-                            >
-                              Download
-                            </button>
+                            <EvidenceDownloadButton item={item} />
                           )}
                         </div>
                       </div>
                       {(item.status === "UPLOADED" || item.status === "VERIFIED") && (
-                        <EvidenceMedia jobId={jobId} item={item} />
+                        <EvidenceMedia item={item} onExpired={() => void loadEvidence()} />
                       )}
                       {(item.media_type === "IMAGE" || item.media_type === "DOCUMENT") && (
                         <EvidenceOcrCard item={item} />

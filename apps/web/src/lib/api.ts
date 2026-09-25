@@ -152,6 +152,14 @@ export type EvidenceSummary = {
   captured_at: string;
   uploaded_at: string | null;
   status: "PENDING" | "UPLOADED" | "VERIFIED" | "REJECTED";
+  /**
+   * A pre-signed S3 GET for the file itself, built per item by
+   * ClientEvidenceReviewService. The bucket is private, so this is the only
+   * way to see the evidence -- and it expires (AWS_S3_PRESIGNED_URL_EXPIRY_
+   * SECONDS, ten minutes by default), so it is fetched with the list rather
+   * than held onto.
+   */
+  download: { url: string; expires_at: string };
   preview_url?: string;
   ocrStatus?: "idle" | "processing" | "ready" | "failed";
   ocrResult?: OCRResult;
@@ -593,14 +601,15 @@ export const api = {
       `/client/jobs/${encodeURIComponent(jobId)}`,
     );
   },
-  clientJobEvidence(jobId: string): Promise<{ job: Job; evidence: EvidenceSummary[] }> {
-    return request<{ job: Job; evidence: EvidenceSummary[] }>(
+  /**
+   * Returns evidence only -- no job. The type used to claim a `job` field,
+   * and the review screen read it, so `job` was always undefined and the
+   * whole page rendered its "Job not found." branch. Pair this with
+   * clientJob() when the job itself is needed.
+   */
+  clientJobEvidence(jobId: string): Promise<{ evidence: EvidenceSummary[] }> {
+    return request<{ evidence: EvidenceSummary[] }>(
       `/client/jobs/${encodeURIComponent(jobId)}/evidence`,
-    );
-  },
-  clientEvidenceDownloadUrl(jobId: string, mediaId: string): Promise<{ url: string }> {
-    return request<{ url: string }>(
-      `/client/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(mediaId)}/download`,
     );
   },
   grantConsent(purpose: string): Promise<{ granted: boolean }> {
