@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { AnonymousBadge, Chip, SectionCard } from "@/components/marketplace/primitives";
+import { JobEvidenceGallery } from "@/components/client/evidence-viewer";
 import { PageHeader } from "@/components/shell/portal-shell";
 
 export const Route = createFileRoute("/client/jobs/$jobId")({
@@ -40,6 +41,20 @@ function statusTone(status: JobStatus): "neutral" | "primary" | "success" | "dan
   if (status === "SUBMITTED") return "primary";
   return "neutral";
 }
+
+/**
+ * The job states where the API returns evidence. It starts at IN_PROGRESS
+ * because a worker uploads as they go, and runs to COMPLETED so a client can
+ * still open the photos they paid for long after approving. Asking outside
+ * this set is an EVIDENCE_NOT_AVAILABLE error, not an empty list.
+ */
+const EVIDENCE_VISIBLE_STATUSES = new Set<JobStatus>([
+  "IN_PROGRESS",
+  "SUBMITTED",
+  "APPROVED",
+  "COMPLETED",
+  "DISPUTED",
+]);
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return `${error.code}: ${error.message}`;
@@ -304,6 +319,15 @@ function JobDetails() {
               </p>
             )}
           </SectionCard>
+
+          {EVIDENCE_VISIBLE_STATUSES.has(job.status) && (
+            <SectionCard
+              title="Photos and video from the worker"
+              description="What was captured on site, straight from the app."
+            >
+              <JobEvidenceGallery jobId={jobId} />
+            </SectionCard>
+          )}
         </div>
 
         <div className="space-y-6">

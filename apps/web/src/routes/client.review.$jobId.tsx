@@ -25,6 +25,7 @@ import {
   SectionCard,
   SuccessCheck,
 } from "@/components/marketplace/primitives";
+import { EvidenceMedia } from "@/components/client/evidence-viewer";
 import { api, ApiError, type EvidenceSummary, type Job } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 
@@ -255,6 +256,9 @@ function ReviewPage() {
                           )}
                         </div>
                       </div>
+                      {(item.status === "UPLOADED" || item.status === "VERIFIED") && (
+                        <EvidenceMedia jobId={jobId} item={item} />
+                      )}
                       {(item.media_type === "IMAGE" || item.media_type === "DOCUMENT") && (
                         <EvidenceOcrCard item={item} />
                       )}

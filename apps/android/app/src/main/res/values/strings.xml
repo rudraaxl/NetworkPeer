@@ -257,6 +257,13 @@
         <item quantity="other">%1$d jobs in progress</item>
     </plurals>
 
+    <!-- Finished work, on the dashboard -->
+    <string name="completed_jobs">Completed</string>
+    <plurals name="jobs_approved">
+        <item quantity="one">%1$d job approved and paid</item>
+        <item quantity="other">%1$d jobs approved and paid</item>
+    </plurals>
+
     <!-- Evidence review and text extraction -->
     <string name="ocr_status_ready">Text ready</string>
     <string name="ocr_status_processing">Reading text</string>

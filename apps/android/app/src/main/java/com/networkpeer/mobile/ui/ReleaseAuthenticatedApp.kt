@@ -221,6 +221,27 @@ private val ACTIVE_WORKER_STATUSES = listOf(
     JobStatus.SUBMITTED,
 )
 
+/**
+ * Work the client has signed off. ACTIVE_WORKER_STATUSES stops at SUBMITTED,
+ * so until now an approved job left the top of the feed and appeared nowhere
+ * else -- the only sign a worker had that the work was accepted was the wallet
+ * balance moving, with nothing to say which job it was for.
+ *
+ * CANCELLED and DISPUTED are deliberately not here. A disputed job is not
+ * finished and does not belong under a heading that says it is.
+ */
+private val COMPLETED_WORKER_STATUSES = listOf(
+    JobStatus.APPROVED,
+    JobStatus.COMPLETED,
+)
+
+/**
+ * How many finished jobs the dashboard lists. It is a recent-history strip,
+ * not an archive: the whole record lives in the wallet, and an unbounded list
+ * would push the nearby work below it off the screen.
+ */
+private const val COMPLETED_JOBS_SHOWN = 5
+
 enum class JobFilter(val label: Int) {
     ALL(R.string.filter_all),
     NEARBY(R.string.filter_nearby),
@@ -583,6 +604,19 @@ private fun WorkerDashboardScreen(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    // Finished work, from the same durable snapshot the feed reads. GET
+    // /worker/sync returns every job whose worker_id is this worker whatever
+    // its status, so this section costs no extra request and survives being
+    // offline.
+    val allWorkerJobs by container.durableState.workerJobs.collectAsState()
+    val completedJobs = remember(allWorkerJobs) {
+        allWorkerJobs
+            .filter { it.status in COMPLETED_WORKER_STATUSES }
+            // updated_at is an ISO-8601 UTC timestamp, so sorting the strings
+            // is sorting the instants. Newest first.
+            .sortedByDescending { it.updated_at }
+    }
+
     suspend fun load() {
         loading = true
         error = null
@@ -720,6 +754,22 @@ private fun WorkerDashboardScreen(
                         }
                     }
                 }
+            }
+        }
+
+        if (completedJobs.isNotEmpty()) {
+            item {
+                NpSectionHeader(
+                    title = stringResource(R.string.completed_jobs),
+                    subtitle = pluralStringResource(
+                        R.plurals.jobs_approved,
+                        completedJobs.size,
+                        completedJobs.size,
+                    ),
+                )
+            }
+            items(completedJobs.take(COMPLETED_JOBS_SHOWN), key = { "done-" + it.id }) { job ->
+                CompletedJobCard(job)
             }
         }
 
@@ -1365,7 +1415,7 @@ private fun WorkerDiscoveryScreen(
                     ),
                 )
             }
-            items(activeJobs, key = { "active-${'$'}{it.id}" }) { job ->
+            items(activeJobs, key = { "active-" + it.id }) { job ->
                 ActiveJobCard(job = job, onClick = { onOpenActiveJob(job.id) })
             }
             item { NpHairline(Modifier.padding(vertical = Space.sm)) }
@@ -1784,6 +1834,56 @@ private fun ActiveJobCard(job: WorkerJobDetail, onClick: () -> Unit) {
                 },
                 onClick = onClick,
             )
+        }
+    }
+}
+
+/**
+ * A finished job. Deliberately not clickable: the task screen it would open
+ * is the evidence-capture flow, which has nothing left to offer on a job the
+ * client has already approved. What a worker wants here is confirmation --
+ * which job, and what it paid.
+ */
+@Composable
+private fun CompletedJobCard(job: WorkerJobDetail) {
+    NpCard {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusPill(job.status)
+                Spacer(Modifier.weight(1f))
+                NpMoney(
+                    amount = formatMoney(job.budget_cents, job.currency),
+                    size = MoneySize.Small,
+                    color = MaterialTheme.np.accent,
+                )
+            }
+
+            Text(
+                text = job.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.np.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            job.address?.takeIf { it.isNotBlank() }?.let { address ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.np.inkFaint,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(Space.xs))
+                    Text(
+                        text = address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.np.inkMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
     }
 }
