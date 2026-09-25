@@ -273,7 +273,12 @@ export async function listAllPostedJobs(input: AllPostedJobsInput): Promise<Work
         j.created_at,
         '1_TO_5_KM' AS distance_band
       FROM jobs j
-      WHERE j.status IN ('POSTED', 'FUNDING')
+      -- POSTED only. A FUNDING job has escrow PENDING or UNFUNDED, and
+      -- accept_job requires status POSTED with escrow HELD -- so listing
+      -- one here advertised work nobody had paid for, which 409'd the
+      -- moment a worker tapped Accept. A job is on offer once it is paid
+      -- for, not before.
+      WHERE j.status = 'POSTED'
         AND j.worker_id IS NULL
         AND EXISTS (
           SELECT 1 FROM users client
@@ -292,7 +297,12 @@ export async function countAllPostedJobs(): Promise<number> {
     `
       SELECT COUNT(*)::int AS total
       FROM jobs j
-      WHERE j.status IN ('POSTED', 'FUNDING')
+      -- POSTED only. A FUNDING job has escrow PENDING or UNFUNDED, and
+      -- accept_job requires status POSTED with escrow HELD -- so listing
+      -- one here advertised work nobody had paid for, which 409'd the
+      -- moment a worker tapped Accept. A job is on offer once it is paid
+      -- for, not before.
+      WHERE j.status = 'POSTED'
         AND j.worker_id IS NULL
         AND EXISTS (
           SELECT 1 FROM users client
@@ -337,7 +347,12 @@ export async function listNearbyPostedJobs(input: NearbyJobsInput): Promise<Work
         END AS distance_band
       FROM jobs j
       LEFT JOIN worker_location ON TRUE
-      WHERE j.status IN ('POSTED', 'FUNDING')
+      -- POSTED only. A FUNDING job has escrow PENDING or UNFUNDED, and
+      -- accept_job requires status POSTED with escrow HELD -- so listing
+      -- one here advertised work nobody had paid for, which 409'd the
+      -- moment a worker tapped Accept. A job is on offer once it is paid
+      -- for, not before.
+      WHERE j.status = 'POSTED'
         AND j.worker_id IS NULL
         AND EXISTS (
           SELECT 1 FROM users client

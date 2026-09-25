@@ -368,7 +368,13 @@ private fun CodeScreen(
 
     val registering = state.mode == AuthMode.REGISTER
     val codeComplete = code.length >= 4
+    // Both are required to create an account, despite mobile_number being
+    // optional in the verify schema: the service rejects a new account without
+    // one ("A valid mobile number is required"). Labelling it optional here
+    // meant a worker could fill the form correctly and be turned away by a
+    // validation error with nothing on screen to explain it.
     val nameOk = !registering || fullName.trim().length >= 2
+    val mobileOk = !registering || mobile.trim().length >= 8
 
     AuthScaffold(
         onBack = onBack,
@@ -411,7 +417,7 @@ private fun CodeScreen(
             NpTextField(
                 value = mobile,
                 onValueChange = { mobile = it },
-                label = stringResource(R.string.mobile_number_optional),
+                label = stringResource(R.string.mobile_number),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 enabled = !verifying,
             )
@@ -429,7 +435,7 @@ private fun CodeScreen(
             } else {
                 stringResource(R.string.auth_sign_in_action)
             },
-            enabled = codeComplete && nameOk,
+            enabled = codeComplete && nameOk && mobileOk,
             loading = verifying,
             onClick = {
                 scope.launch {

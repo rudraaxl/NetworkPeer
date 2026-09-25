@@ -47,6 +47,60 @@ function databaseErrorCode(err: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
+function databaseErrorMessage(err: unknown): string {
+  if (typeof err !== "object" || err === null || !("message" in err)) return "";
+  const message = (err as { message?: unknown }).message;
+  return typeof message === "string" ? message : "";
+}
+
+/**
+ * Turn a failed claim into something the worker can act on.
+ *
+ * accept_job refuses for four different reasons and raises them with shared
+ * SQLSTATEs (22000 and 55000), so the codes alone cannot tell them apart. Every
+ * one of them used to arrive as "Job is no longer available" with a 409, which
+ * the app renders as "This action has already been performed" -- so a worker
+ * whose GPS had not fixed yet was told they had already taken the job. Three of
+ * the four are things they can fix in the next ten seconds, and none of them
+ * mean what that message says.
+ *
+ * The messages are matched rather than the codes because they are literals in
+ * our own migration, and giving each one its own SQLSTATE would mean rewriting
+ * the function. The fallback stays correct if one is ever reworded.
+ */
+function claimFailure(err: unknown): WorkerJobServiceError {
+  const message = databaseErrorMessage(err).toLowerCase();
+  if (message.includes("location is missing or stale")) {
+    return new WorkerJobServiceError(
+      "WORKER_LOCATION_REQUIRED",
+      "We need your current location before you can accept work. Turn on location and refresh the job list.",
+      409,
+    );
+  }
+  if (message.includes("outside the worker preferred radius")) {
+    return new WorkerJobServiceError(
+      "JOB_OUT_OF_RANGE",
+      "This job is outside the distance you have chosen to work within.",
+      409,
+    );
+  }
+  if (message.includes("worker is not verified")) {
+    return new WorkerJobServiceError(
+      "WORKER_NOT_VERIFIED",
+      "Your worker account is not verified yet.",
+      403,
+    );
+  }
+  if (message.includes("not claimable")) {
+    return new WorkerJobServiceError(
+      "JOB_NOT_CLAIMABLE",
+      "This job is not open for acceptance -- it may be unfunded, or someone else has taken it.",
+      409,
+    );
+  }
+  return new WorkerJobServiceError("JOB_NOT_AVAILABLE", "Job is no longer available", 409);
+}
+
 export class WorkerJobService {
   private async requireVerifiedWorker(workerId: string): Promise<WorkerJobProfile> {
     let profile = await getWorkerJobProfile(workerId);
@@ -211,7 +265,7 @@ export class WorkerJobService {
     } catch (err) {
       const code = databaseErrorCode(err);
       if (code === "22000" || code === "55000" || code === "23514" || code === "23505") {
-        throw new WorkerJobServiceError("JOB_NOT_AVAILABLE", "Job is no longer available", 409);
+        throw claimFailure(err);
       }
       throw err;
     }
