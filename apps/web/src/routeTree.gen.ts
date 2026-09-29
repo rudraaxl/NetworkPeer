@@ -32,6 +32,7 @@ import { Route as ClientJobsIndexRouteImport } from './routes/client.jobs.index'
 import { Route as ClientJobsJobIdRouteImport } from './routes/client.jobs.$jobId'
 import { Route as ClientJobsNewRouteImport } from './routes/client.jobs.new'
 import { Route as ClientReviewJobIdRouteImport } from './routes/client.review.$jobId'
+import { Route as ClientJobsJobIdOcrRouteImport } from './routes/client.jobs_.$jobId.ocr'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -148,6 +149,11 @@ const ClientReviewJobIdRoute = ClientReviewJobIdRouteImport.update({
   path: '/review/$jobId',
   getParentRoute: () => ClientRoute,
 } as any)
+const ClientJobsJobIdOcrRoute = ClientJobsJobIdOcrRouteImport.update({
+  id: '/jobs_/$jobId/ocr',
+  path: '/jobs/$jobId/ocr',
+  getParentRoute: () => ClientRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -173,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/client/jobs/new': typeof ClientJobsNewRoute
   '/client/review/$jobId': typeof ClientReviewJobIdRoute
   '/client/jobs/': typeof ClientJobsIndexRoute
+  '/client/jobs/$jobId/ocr': typeof ClientJobsJobIdOcrRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -196,6 +203,7 @@ export interface FileRoutesByTo {
   '/client/jobs/new': typeof ClientJobsNewRoute
   '/client/review/$jobId': typeof ClientReviewJobIdRoute
   '/client/jobs': typeof ClientJobsIndexRoute
+  '/client/jobs/$jobId/ocr': typeof ClientJobsJobIdOcrRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -222,6 +230,7 @@ export interface FileRoutesById {
   '/client/jobs/new': typeof ClientJobsNewRoute
   '/client/review/$jobId': typeof ClientReviewJobIdRoute
   '/client/jobs/': typeof ClientJobsIndexRoute
+  '/client/jobs_/$jobId/ocr': typeof ClientJobsJobIdOcrRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -249,6 +258,7 @@ export interface FileRouteTypes {
     | '/client/jobs/new'
     | '/client/review/$jobId'
     | '/client/jobs/'
+    | '/client/jobs/$jobId/ocr'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -272,6 +282,7 @@ export interface FileRouteTypes {
     | '/client/jobs/new'
     | '/client/review/$jobId'
     | '/client/jobs'
+    | '/client/jobs/$jobId/ocr'
   id:
     | '__root__'
     | '/'
@@ -297,6 +308,7 @@ export interface FileRouteTypes {
     | '/client/jobs/new'
     | '/client/review/$jobId'
     | '/client/jobs/'
+    | '/client/jobs_/$jobId/ocr'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -472,6 +484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientReviewJobIdRouteImport
       parentRoute: typeof ClientRoute
     }
+    '/client/jobs_/$jobId/ocr': {
+      id: '/client/jobs_/$jobId/ocr'
+      path: '/jobs/$jobId/ocr'
+      fullPath: '/client/jobs/$jobId/ocr'
+      preLoaderRoute: typeof ClientJobsJobIdOcrRouteImport
+      parentRoute: typeof ClientRoute
+    }
   }
 }
 
@@ -508,6 +527,7 @@ interface ClientRouteChildren {
   ClientJobsNewRoute: typeof ClientJobsNewRoute
   ClientReviewJobIdRoute: typeof ClientReviewJobIdRoute
   ClientJobsIndexRoute: typeof ClientJobsIndexRoute
+  ClientJobsJobIdOcrRoute: typeof ClientJobsJobIdOcrRoute
 }
 
 const ClientRouteChildren: ClientRouteChildren = {
@@ -519,6 +539,7 @@ const ClientRouteChildren: ClientRouteChildren = {
   ClientJobsNewRoute: ClientJobsNewRoute,
   ClientReviewJobIdRoute: ClientReviewJobIdRoute,
   ClientJobsIndexRoute: ClientJobsIndexRoute,
+  ClientJobsJobIdOcrRoute: ClientJobsJobIdOcrRoute,
 }
 
 const ClientRouteWithChildren =

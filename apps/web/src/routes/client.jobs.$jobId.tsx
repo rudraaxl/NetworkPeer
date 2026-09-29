@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock3,
   CreditCard,
+  FileText,
   Loader2,
   MapPin,
   XCircle,
@@ -324,6 +325,15 @@ function JobDetails() {
             <SectionCard
               title="Photos and video from the worker"
               description="What was captured on site, straight from the app."
+              action={
+                <Link
+                  to="/client/jobs/$jobId/ocr"
+                  params={{ jobId }}
+                  className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium"
+                >
+                  <FileText className="h-4 w-4" /> Transcribe pages
+                </Link>
+              }
             >
               <JobEvidenceGallery jobId={jobId} />
             </SectionCard>
