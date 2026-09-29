@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileText,
+  Download,
   Info,
   Loader2,
   Save,
@@ -69,6 +70,83 @@ function isPage(item: EvidenceSummary): boolean {
   );
 }
 
+/**
+ * Writes the transcriptions out as a .docx.
+ *
+ * The docx library is around half a megabyte, and most visits to this screen
+ * never export anything, so it is imported inside the handler rather than at
+ * module scope -- Vite splits it into its own chunk that is fetched on the
+ * first click.
+ *
+ * The font is set explicitly because of what is being transcribed. Word's
+ * default body font has no Devanagari coverage, so Hindi text lands as empty
+ * boxes; "Nirmala UI" ships with Windows and covers it, and Word on macOS
+ * substitutes a Devanagari face of its own rather than failing. The complex-
+ * script slot (cs) is the one that governs Devanagari, so it is set alongside
+ * the Latin slots rather than instead of them.
+ */
+async function exportTranscriptions(
+  jobId: string,
+  entries: { pageNumber: number; capturedAt: string; text: string }[],
+): Promise<void> {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
+
+  const font = { ascii: "Nirmala UI", hAnsi: "Nirmala UI", cs: "Nirmala UI" };
+
+  const children = entries.flatMap((entry) => [
+    new Paragraph({
+      heading: HeadingLevel.HEADING_2,
+      children: [new TextRun({ text: `Page ${entry.pageNumber}`, font })],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Captured ${new Date(entry.capturedAt).toLocaleString()}`,
+          italics: true,
+          size: 18,
+          font,
+        }),
+      ],
+    }),
+    // A blank line, then the body. Newlines inside a run are not rendered by
+    // Word, so each typed line becomes its own paragraph.
+    new Paragraph({ children: [] }),
+    ...entry.text.split("\n").map(
+      (line) => new Paragraph({ children: [new TextRun({ text: line, font })] }),
+    ),
+    new Paragraph({ children: [] }),
+  ]);
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [new TextRun({ text: "Transcription", font })],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `Job ${jobId}`, italics: true, size: 18, font }),
+            ],
+          }),
+          new Paragraph({ children: [] }),
+          ...children,
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `transcription-${jobId.slice(0, 8)}.docx`;
+  anchor.click();
+  // Revoking immediately can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 function TranscriptionReview() {
   const { jobId } = Route.useParams();
   const [evidence, setEvidence] = useState<EvidenceSummary[] | null>(null);
@@ -91,9 +169,33 @@ function TranscriptionReview() {
     void load();
   }, [load]);
 
+  const [exporting, setExporting] = useState(false);
+
   const pages = useMemo(() => (evidence ?? []).filter(isPage), [evidence]);
   const selected = pages.find((page) => page.id === selectedId) ?? null;
   const statusOf = (item: EvidenceSummary): PageStatus => statuses[item.id] ?? "pending";
+
+  // Only pages that actually have text; exporting a file of empty headings
+  // would be worse than the button being disabled.
+  const transcribed = pages
+    .map((page, index) => ({
+      pageNumber: index + 1,
+      capturedAt: page.captured_at,
+      text: (drafts[page.id] ?? "").trim(),
+    }))
+    .filter((entry) => entry.text.length > 0);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportTranscriptions(jobId, transcribed);
+      toast.success("Word document downloaded.");
+    } catch {
+      toast.error("Could not build the document. Try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const decide = (item: EvidenceSummary, status: PageStatus, message: string) => {
     setStatuses((current) => ({ ...current, [item.id]: status }));
@@ -126,13 +228,33 @@ function TranscriptionReview() {
         title="Transcription review"
         description={`${pages.length} page${pages.length === 1 ? "" : "s"} uploaded for this job`}
         action={
-          <Link
-            to="/client/jobs/$jobId"
-            params={{ jobId }}
-            className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-base font-medium"
-          >
-            <ArrowLeft className="h-4 w-4" /> Job details
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleExport()}
+              disabled={exporting || transcribed.length === 0}
+              title={
+                transcribed.length === 0
+                  ? "Transcribe at least one page first"
+                  : `Download ${transcribed.length} transcribed page${transcribed.length === 1 ? "" : "s"}`
+              }
+              className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-base font-medium disabled:opacity-50"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden />
+              )}
+              Download as Word
+            </button>
+            <Link
+              to="/client/jobs/$jobId"
+              params={{ jobId }}
+              className="press inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-base font-medium"
+            >
+              <ArrowLeft className="h-4 w-4" /> Job details
+            </Link>
+          </div>
         }
       />
 
