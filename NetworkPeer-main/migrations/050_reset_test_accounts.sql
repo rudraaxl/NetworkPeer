@@ -28,6 +28,12 @@
 -- way around the rules. set_config's third argument scopes it to this
 -- transaction, so it cannot leak into anything the API later runs.
 --
+-- ON THE CIRCULAR REFERENCE: jobs and ledger_transactions reference each
+-- other. Deleting the transactions first fails on jobs' two RESTRICT columns;
+-- deleting the jobs first fails on ledger_transactions.job_id. The knot is cut
+-- by nulling those two columns on the jobs being removed, which no trigger
+-- objects to, before deleting either table.
+--
 -- The whole block is defensive: it resolves the accounts by address, does
 -- nothing at all if neither exists, and reports what it removed. Re-running it
 -- is harmless, because the second run finds no jobs.
@@ -93,6 +99,23 @@ BEGIN
     WHERE job_id = ANY(v_job_ids)
        OR (array_length(v_txn_ids, 1) IS NOT NULL AND ledger_transaction_id = ANY(v_txn_ids));
     GET DIAGNOSTICS v_postings = ROW_COUNT;
+
+    -- jobs points BACK at ledger_transactions through two columns, both
+    -- ON DELETE RESTRICT (migration 023): escrow_ledger_transaction_id and
+    -- settlement_ledger_transaction_id. The reference is circular -- a job
+    -- names its escrow transaction while that transaction names the job -- so
+    -- the transactions cannot be deleted while the jobs still point at them,
+    -- even though the jobs are about to be deleted themselves. The first
+    -- attempt at this migration failed here with 23503 for exactly that reason.
+    --
+    -- Clearing the columns first is safe: enforce_job_financial_state only
+    -- compares status against escrow_status and never reads these, and
+    -- enforce_job_lifecycle_transition returns immediately when the status is
+    -- unchanged.
+    UPDATE public.jobs
+    SET escrow_ledger_transaction_id = NULL,
+        settlement_ledger_transaction_id = NULL
+    WHERE id = ANY(v_job_ids);
 
     DELETE FROM public.ledger_transactions WHERE job_id = ANY(v_job_ids);
     GET DIAGNOSTICS v_txns = ROW_COUNT;
