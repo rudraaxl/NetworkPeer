@@ -6,7 +6,6 @@ import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserNavMenu } from "@/components/shell/user-nav-menu";
-import { AnonymousBadge } from "@/components/marketplace/primitives";
 import { authSession } from "@/lib/auth-session";
 import { api } from "@/lib/api";
 
@@ -99,13 +98,6 @@ export function PortalShell({
           );
         })}
       </nav>
-
-      <div className="rounded-2xl border border-border bg-gradient-to-br from-primary-soft to-transparent p-4">
-        <AnonymousBadge role={identity === "Admin" ? "Client" : identity} />
-        <p className="mt-2 text-base leading-relaxed text-muted-foreground">
-          Identities stay hidden until a job is accepted. All contact happens through NetworkPeers.
-        </p>
-      </div>
     </div>
   );
 
