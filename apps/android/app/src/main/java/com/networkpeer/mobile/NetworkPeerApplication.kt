@@ -13,7 +13,9 @@ import com.networkpeer.mobile.core.data.DurableAppState
 import com.networkpeer.mobile.core.data.MarketplaceRepository
 import com.networkpeer.mobile.core.data.SyncRepository
 import com.networkpeer.mobile.core.evidence.DurableEvidenceUploadQueue
+import com.networkpeer.mobile.core.evidence.EvidenceUploadScheduler
 import com.networkpeer.mobile.core.evidence.EvidenceUploader
+import com.networkpeer.mobile.core.model.Point
 import com.networkpeer.mobile.core.network.NetworkPeerClient
 import com.networkpeer.mobile.core.notifications.FcmTokenRegistrar
 import com.networkpeer.mobile.core.notifications.NetworkPeerNotifications
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import java.util.concurrent.CancellationException
 
 class NetworkPeerApplication : Application() {
@@ -40,6 +43,13 @@ class NetworkPeerApplication : Application() {
             runCatching { PaymentConfiguration.init(this, container.client.configuration.stripePublishableKey) }
         }
         ProcessLifecycleOwner.get().lifecycle.addObserver(container.realtimeSyncManager)
+        // An upload interrupted by the process dying used to resume only if the worker
+        // reopened that exact job screen. Asking for a drain on every start is what
+        // makes "the upload resumes even if I kill the app" true; the scheduler is a
+        // no-op when the queue is empty.
+        if (container.durableState.pendingEvidence.value.isNotEmpty()) {
+            EvidenceUploadScheduler.schedule(this)
+        }
     }
 }
 
@@ -149,6 +159,70 @@ class AppContainer(context: Context) {
             } catch (_: Throwable) {
                 // Foreground and realtime recovery retry an unavailable sync API.
             }
+        }
+    }
+
+    /**
+     * Records a capture and asks for a background drain.
+     *
+     * Deliberately launched on applicationScope. The task screen used to await
+     * `enqueueAndUpload` on its own `rememberCoroutineScope`, so a worker who took a
+     * photo and went back to the feed cancelled their own upload. Nothing about
+     * sending a file the camera has already written to local storage should depend on
+     * a composable still being on screen.
+     *
+     * `onFailure` reports only the things that fail before the item is durable -- an
+     * unreadable or oversized file. Once queued, failures belong to the queue and
+     * surface per photo, not as a screen-level error.
+     */
+    fun queueEvidenceUpload(
+        jobId: String,
+        subtaskId: String,
+        uri: Uri,
+        attachLocation: Boolean,
+        appOwnedUri: Boolean,
+        onFailure: (Throwable) -> Unit,
+    ) {
+        applicationScope.launch {
+            try {
+                val location = if (attachLocation) {
+                    currentOrLastLocation()?.let { Point.fromLatitudeLongitude(it.latitude, it.longitude) }
+                } else {
+                    null
+                }
+                evidenceQueue.enqueue(
+                    jobId = jobId,
+                    subtaskId = subtaskId,
+                    uri = uri,
+                    location = location,
+                    appOwnedUri = appOwnedUri,
+                )
+                EvidenceUploadScheduler.schedule(applicationContext)
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Throwable) {
+                // The caller writes Compose state, which must not happen off the main
+                // thread. applicationScope is Dispatchers.Default.
+                withContext(Dispatchers.Main) { onFailure(failure) }
+            }
+        }
+    }
+
+    /** Re-drives the queue, for the retry affordance and on returning to a job. */
+    fun kickEvidenceUploads() {
+        if (evidenceQueue.hasRetryableWork()) EvidenceUploadScheduler.schedule(applicationContext)
+    }
+
+    /**
+     * Clears one item's backoff and asks for a drain. Runs off the main thread because
+     * DurableAppState persists with a synchronous SharedPreferences commit -- calling
+     * this straight from a button's onClick would put that fsync back on the main
+     * thread, which is the fault this change exists to remove.
+     */
+    fun retryEvidenceUpload(id: String) {
+        applicationScope.launch {
+            durableState.clearEvidenceBackoff(id)
+            EvidenceUploadScheduler.schedule(applicationContext)
         }
     }
 

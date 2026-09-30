@@ -2364,7 +2364,6 @@ private fun WorkerTaskScreen(
     var job by remember { mutableStateOf<WorkerJobDetail?>(null) }
     var loading by remember { mutableStateOf(false) }
     var updating by remember { mutableStateOf(false) }
-    var uploadingSubtaskId by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var includeLocation by rememberSaveable { mutableStateOf(false) }
     var selectedSubtaskId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -2384,29 +2383,27 @@ private fun WorkerTaskScreen(
         }
     }
 
+    /**
+     * Hands the capture to the durable queue and returns. This used to await the whole
+     * upload on `scope` -- the composable's own `rememberCoroutineScope` -- which meant
+     * going back to the feed cancelled the upload in flight, and every confirm ran a
+     * synchronous SharedPreferences commit on the main thread. Both are why uploading
+     * a page could take the app down with it.
+     *
+     * The photo is already on local storage at this point: the camera wrote it into
+     * filesDir through the evidence FileProvider before this is ever called. So there
+     * is nothing to wait for here, and the worker can carry straight on to the feed.
+     */
     fun enqueueEvidence(subtaskId: String, uri: Uri, appOwnedUri: Boolean) {
         val activeJob = job ?: return
-        scope.launch {
-            uploadingSubtaskId = subtaskId
-            try {
-                val location = if (includeLocation && hasLocationPermission(context)) {
-                    container.currentOrLastLocation()?.toPoint()
-                } else {
-                    null
-                }
-                container.evidenceQueue.enqueueAndUpload(
-                    jobId = activeJob.id,
-                    subtaskId = subtaskId,
-                    uri = uri,
-                    location = location,
-                    appOwnedUri = appOwnedUri,
-                )
-            } catch (failure: Throwable) {
-                error = friendlyError(context, failure)
-            } finally {
-                uploadingSubtaskId = null
-            }
-        }
+        container.queueEvidenceUpload(
+            jobId = activeJob.id,
+            subtaskId = subtaskId,
+            uri = uri,
+            attachLocation = includeLocation && hasLocationPermission(context),
+            appOwnedUri = appOwnedUri,
+            onFailure = { failure -> error = friendlyError(context, failure) },
+        )
     }
 
     var workerOcrTarget by remember { mutableStateOf<OcrDialogPayload?>(null) }
@@ -2562,7 +2559,10 @@ private fun WorkerTaskScreen(
 
     LaunchedEffect(jobId) {
         reload()
-        container.evidenceQueue.retryForJob(jobId)
+        // Opening the job is a good moment to re-drive anything still queued, but it is
+        // no longer the ONLY moment: EvidenceUploadWorker drains on app start and on
+        // every capture, so an upload no longer depends on the worker coming back here.
+        container.kickEvidenceUploads()
     }
 
     val activeJob = job
@@ -2574,7 +2574,17 @@ private fun WorkerTaskScreen(
             evidence.subtask_id == subtask.id && evidence.status in setOf(MediaStatus.UPLOADED, MediaStatus.VERIFIED)
         }
     }
-    val readyToSubmit = activeJob?.status == JobStatus.IN_PROGRESS && requiredEvidenceComplete && pendingForJob.isEmpty()
+    // The floor, matching migration 051's database guard: a job cannot be submitted
+    // with nothing attached. `requiredSubtasks.all {}` above is vacuously true when a
+    // job has no subtasks, or none marked required, so on its own it let a worker
+    // submit an empty job -- which the client could then approve, releasing escrow
+    // for no delivered work. The server now refuses that; this stops the worker
+    // reaching a request that can only fail.
+    val hasAnyEvidence = confirmedForJob.any { it.status in setOf(MediaStatus.UPLOADED, MediaStatus.VERIFIED) }
+    val readyToSubmit = activeJob?.status == JobStatus.IN_PROGRESS &&
+        hasAnyEvidence &&
+        requiredEvidenceComplete &&
+        pendingForJob.isEmpty()
     val nextStatus = activeJob?.status?.let { status ->
         when (status) {
             JobStatus.ASSIGNED -> JobStatus.EN_ROUTE
@@ -2695,46 +2705,74 @@ private fun WorkerTaskScreen(
                             // The API reports ocr_status "unavailable"; until it reports
                             // something real there is nothing truthful to display here.
                         }
+                        // Each queued photo reports its own state. There used to be one
+                        // shared line driven by `uploadingSubtaskId`, so every pending
+                        // item on the subtask showed the same text regardless of which
+                        // one was actually moving.
                         pendingForSubtask.forEach { pending ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    if (uploadingSubtaskId == subtask.id) stringResource(R.string.uploading_evidence) else pending.lastError ?: stringResource(R.string.uploading_evidence),
+                                    when {
+                                        pending.permanentFailure -> stringResource(R.string.evidence_upload_blocked)
+                                        pending.lastError != null -> stringResource(R.string.evidence_upload_failed_retrying)
+                                        else -> stringResource(R.string.evidence_queued)
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (pending.lastError == null) MaterialTheme.np.inkMuted else MaterialTheme.np.danger,
+                                    color = if (pending.permanentFailure) MaterialTheme.np.danger else MaterialTheme.np.inkMuted,
                                 )
-                                if (pending.lastError != null && uploadingSubtaskId == null) {
+                                if (pending.lastError != null) {
+                                    // Retrying is now a hint to the background drain rather
+                                    // than an upload the UI performs and waits on.
                                     OutlinedButton(
                                         onClick = {
-                                            scope.launch {
-                                                uploadingSubtaskId = pending.subtaskId
-                                                try {
-                                                    container.evidenceQueue.retry(pending.id)
-                                                } catch (failure: Throwable) {
-                                                    error = friendlyError(context, failure)
-                                                } finally {
-                                                    uploadingSubtaskId = null
-                                                }
-                                            }
+                                            container.retryEvidenceUpload(pending.id)
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                     ) { Text(stringResource(R.string.retry_upload)) }
                                 }
                             }
                         }
+                        // `&& uploadingSubtaskId == null` used to be here, which disabled
+                        // capture on EVERY subtask while any single upload was in flight.
+                        // For a job that is mostly photographing pages of a book that is
+                        // the whole task serialised behind one network round-trip.
                         OutlinedButton(
                             onClick = { capture(subtask.id) },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = task.status == JobStatus.IN_PROGRESS && task.is_assigned_to_requester && uploadingSubtaskId == null,
+                            enabled = task.status == JobStatus.IN_PROGRESS && task.is_assigned_to_requester,
                         ) {
                             Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Capture Photo (In-App Only)")
+                            val capturedHere = confirmedForSubtask.size + pendingForSubtask.size
+                            Text(
+                                if (capturedHere == 0) {
+                                    stringResource(R.string.capture_first_page)
+                                } else {
+                                    stringResource(R.string.capture_another_page, capturedHere + 1)
+                                },
+                            )
                         }
                     }
                 }
             }
-            if (task.status == JobStatus.IN_PROGRESS && !pendingForJob.isEmpty()) item {
-                InlineNotice(stringResource(R.string.evidence_pending), Tone.Neutral)
+            if (task.status == JobStatus.IN_PROGRESS && !hasAnyEvidence && pendingForJob.isEmpty()) item {
+                InlineNotice(stringResource(R.string.evidence_required_to_submit), Tone.Neutral)
+            }
+            if (task.status == JobStatus.IN_PROGRESS && pendingForJob.isNotEmpty()) item {
+                // Two separate facts, which the old single notice conflated: how much is
+                // still in flight (informational -- the worker can leave and it keeps
+                // going), and that submitting has to wait for it (a constraint).
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    InlineNotice(
+                        pluralStringResource(
+                            R.plurals.evidence_uploading_count,
+                            pendingForJob.size,
+                            pendingForJob.size,
+                        ),
+                        Tone.Neutral,
+                    )
+                    InlineNotice(stringResource(R.string.evidence_pending), Tone.Neutral)
+                }
             }
             item {
                 Button(

@@ -34,6 +34,20 @@ data class PendingEvidenceUpload(
     val appOwnedUri: Boolean = false,
     val attempts: Int = 0,
     val lastError: String? = null,
+    /**
+     * Epoch millis before which this item must not be retried. The upload used to
+     * be retried only when the worker reopened the job screen, so `attempts` was
+     * recorded and never read. It now drives exponential backoff in
+     * DurableEvidenceUploadQueue.
+     */
+    val nextAttemptAtEpochMs: Long = 0L,
+    /**
+     * Set when the failure cannot be fixed by retrying -- a changed or oversized
+     * file, a rejected MIME type, or a job that is no longer accepting evidence.
+     * The background drain skips these so it does not spin forever; only an
+     * explicit retry or retake clears them.
+     */
+    val permanentFailure: Boolean = false,
 )
 
 @Serializable
@@ -138,9 +152,33 @@ class DurableAppState(context: Context) {
     }
 
     @Synchronized
-    fun markEvidenceAttempt(id: String, error: String? = null) {
+    fun markEvidenceAttempt(
+        id: String,
+        error: String? = null,
+        nextAttemptAtEpochMs: Long = 0L,
+        permanentFailure: Boolean = false,
+    ) {
         val next = _pendingEvidence.value.map { item ->
-            if (item.id == id) item.copy(attempts = item.attempts + 1, lastError = error) else item
+            if (item.id == id) {
+                item.copy(
+                    attempts = item.attempts + 1,
+                    lastError = error,
+                    nextAttemptAtEpochMs = nextAttemptAtEpochMs,
+                    permanentFailure = permanentFailure,
+                )
+            } else {
+                item
+            }
+        }
+        _pendingEvidence.value = next
+        writeList(PENDING_EVIDENCE, PendingEvidenceUpload.serializer(), next)
+    }
+
+    /** Clears backoff and the permanent flag so an explicit retry is attempted at once. */
+    @Synchronized
+    fun clearEvidenceBackoff(id: String) {
+        val next = _pendingEvidence.value.map { item ->
+            if (item.id == id) item.copy(nextAttemptAtEpochMs = 0L, permanentFailure = false) else item
         }
         _pendingEvidence.value = next
         writeList(PENDING_EVIDENCE, PendingEvidenceUpload.serializer(), next)

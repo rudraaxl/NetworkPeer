@@ -149,6 +149,24 @@
     <string name="attach_location">Attach current location to evidence</string>
     <string name="submit_work">Submit for review</string>
     <string name="submitting_work">Submitting…</string>
+    <string name="evidence_required_to_submit">Capture at least one photo before you can submit this job.</string>
+    <string name="capture_first_page">Capture photo</string>
+    <string name="capture_another_page">Capture page %1$d</string>
+    <string name="evidence_upload_channel_name">Evidence uploads</string>
+    <string name="evidence_upload_channel_description">Shows progress while photos you captured finish uploading.</string>
+    <string name="evidence_upload_title">Uploading evidence</string>
+    <string name="evidence_upload_finishing">Finishing up…</string>
+    <string name="evidence_queued">Saved on this phone — uploading in the background</string>
+    <string name="evidence_upload_failed_retrying">Upload paused, will retry automatically</string>
+    <string name="evidence_upload_blocked">This photo cannot be uploaded. Retake it.</string>
+    <plurals name="evidence_upload_remaining">
+        <item quantity="one">%1$d photo left to upload</item>
+        <item quantity="other">%1$d photos left to upload</item>
+    </plurals>
+    <plurals name="evidence_uploading_count">
+        <item quantity="one">%1$d photo uploading in the background</item>
+        <item quantity="other">%1$d photos uploading in the background</item>
+    </plurals>
     <string name="evidence_pending">Please finish or retry pending uploads before submitting.</string>
     <string name="activity_title">Activity</string>
     <string name="activity_body">Your recent activity and notifications.</string>
