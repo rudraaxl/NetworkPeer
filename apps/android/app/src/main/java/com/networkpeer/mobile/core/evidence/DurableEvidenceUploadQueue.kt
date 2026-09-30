@@ -71,37 +71,30 @@ class DurableEvidenceUploadQueue(
         location: Point? = null,
         appOwnedUri: Boolean = false,
     ): PendingEvidenceUpload = withContext(Dispatchers.IO) {
-        // Shrink the photograph before anything measures it. The reservation
-        // carries file_size_bytes and checksum_sha256 and the API re-checks the
-        // stored object against them, so the bytes have to be final before
-        // inspect() sees them. A worker on rural mobile data was otherwise
-        // sending 3-12 MB per page; see EvidenceImageCompressor for why that put
-        // a book-length job out of reach.
-        val compressed = EvidenceImageCompressor.compress(context, context.contentResolver, uri)
-        val sendUri = compressed ?: uri
-        // The compressed copy is ours to delete once it is safely uploaded,
-        // whatever the original was. If the original was a camera capture it has
-        // served its purpose the moment a smaller copy exists.
-        val sendIsAppOwned = if (compressed != null) true else appOwnedUri
-        if (compressed != null && appOwnedUri) EvidenceCapture.delete(context, uri)
-
+        // Evidence is sent exactly as the camera produced it. An earlier version of
+        // this re-encoded photographs to 2048px at JPEG 80 to make a book-length job
+        // viable on a rural uplink; that is a deliberate loss of detail in the
+        // permanent record a client pays against and a dispute is settled on, and it
+        // is not this code's call to make. The transfer is made survivable instead --
+        // see EvidenceNetworkQuality for concurrency and NetworkPeerClient for the
+        // upload timeouts -- and the bytes are left alone.
         val uploadMetadata = try {
-            uploader.inspect(sendUri)
+            uploader.inspect(uri)
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
-            if (sendIsAppOwned) EvidenceCapture.delete(context, sendUri)
+            if (appOwnedUri) EvidenceCapture.delete(context, uri)
             throw failure
         }
         val item = PendingEvidenceUpload(
             id = UUID.randomUUID().toString(),
             jobId = jobId,
             subtaskId = subtaskId,
-            uri = sendUri.toString(),
+            uri = uri.toString(),
             capturedAt = capturedAt.toString(),
             location = location,
             idempotencyKey = UUID.randomUUID().toString(),
             uploadMetadata = uploadMetadata,
-            appOwnedUri = sendIsAppOwned,
+            appOwnedUri = appOwnedUri,
         )
         state.enqueueEvidence(item)
         item
