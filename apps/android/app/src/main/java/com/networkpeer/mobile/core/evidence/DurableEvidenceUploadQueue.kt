@@ -41,7 +41,7 @@ class DurableEvidenceUploadQueue(
     private val uploader: EvidenceUploader,
     private val state: DurableAppState,
 ) {
-    private val slots = Semaphore(MAX_CONCURRENT_UPLOADS)
+    private val slots = Semaphore(EvidenceNetworkQuality.MAX_CONCURRENT_UPLOADS)
     private val inFlightLock = Any()
     private val inFlight = mutableSetOf<String>()
 
@@ -71,23 +71,37 @@ class DurableEvidenceUploadQueue(
         location: Point? = null,
         appOwnedUri: Boolean = false,
     ): PendingEvidenceUpload = withContext(Dispatchers.IO) {
+        // Shrink the photograph before anything measures it. The reservation
+        // carries file_size_bytes and checksum_sha256 and the API re-checks the
+        // stored object against them, so the bytes have to be final before
+        // inspect() sees them. A worker on rural mobile data was otherwise
+        // sending 3-12 MB per page; see EvidenceImageCompressor for why that put
+        // a book-length job out of reach.
+        val compressed = EvidenceImageCompressor.compress(context, context.contentResolver, uri)
+        val sendUri = compressed ?: uri
+        // The compressed copy is ours to delete once it is safely uploaded,
+        // whatever the original was. If the original was a camera capture it has
+        // served its purpose the moment a smaller copy exists.
+        val sendIsAppOwned = if (compressed != null) true else appOwnedUri
+        if (compressed != null && appOwnedUri) EvidenceCapture.delete(context, uri)
+
         val uploadMetadata = try {
-            uploader.inspect(uri)
+            uploader.inspect(sendUri)
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
-            if (appOwnedUri) EvidenceCapture.delete(context, uri)
+            if (sendIsAppOwned) EvidenceCapture.delete(context, sendUri)
             throw failure
         }
         val item = PendingEvidenceUpload(
             id = UUID.randomUUID().toString(),
             jobId = jobId,
             subtaskId = subtaskId,
-            uri = uri.toString(),
+            uri = sendUri.toString(),
             capturedAt = capturedAt.toString(),
             location = location,
             idempotencyKey = UUID.randomUUID().toString(),
             uploadMetadata = uploadMetadata,
-            appOwnedUri = appOwnedUri,
+            appOwnedUri = sendIsAppOwned,
         )
         state.enqueueEvidence(item)
         item
@@ -106,17 +120,22 @@ class DurableEvidenceUploadQueue(
             while (true) {
                 val batch = eligible().filterNot { isInFlight(it.id) }
                 if (batch.isEmpty()) break
+                // Re-measured each pass, because a worker moves: they may start a
+                // job on a village 3G cell and finish it on the office Wi-Fi.
+                val concurrency = EvidenceNetworkQuality.suggestedConcurrency(context)
                 val results = coroutineScope {
-                    batch.map { item ->
-                        async {
-                            if (!claim(item.id)) return@async false
-                            try {
-                                slots.withPermit { uploadOne(item) != null }
-                            } finally {
-                                release(item.id)
+                    batch.chunked(concurrency).flatMap { group ->
+                        group.map { item ->
+                            async {
+                                if (!claim(item.id)) return@async false
+                                try {
+                                    slots.withPermit { uploadOne(item) != null }
+                                } finally {
+                                    release(item.id)
+                                }
                             }
-                        }
-                    }.map { it.await() }
+                        }.map { it.await() }
+                    }
                 }
                 uploaded += results.count { it }
                 onProgress(pending().size)
@@ -212,12 +231,4 @@ class DurableEvidenceUploadQueue(
 
     private fun isInFlight(id: String): Boolean = synchronized(inFlightLock) { id in inFlight }
 
-    private companion object {
-        /**
-         * Enough to keep a phone's uplink busy while photographing the next page,
-         * without putting twenty 25 MiB multipart bodies in flight on a rural
-         * connection and timing all of them out.
-         */
-        const val MAX_CONCURRENT_UPLOADS = 3
-    }
 }

@@ -248,6 +248,17 @@ class NetworkPeerClient(context: Context) {
         // The S3 target is presigned and intentionally receives no API bearer token.
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        // There was no writeTimeout here, so this inherited OkHttp's 10-second
+        // default. That is a timeout on a single socket write stalling, not on
+        // the whole body, which is exactly what happens on a congested rural
+        // uplink once the TCP window fills -- so evidence uploads were being
+        // abandoned mid-body on precisely the connections this has to work on.
+        .writeTimeout(120, TimeUnit.SECONDS)
+        // And there was no callTimeout, so a stalled upload could hang forever
+        // while holding one of the drain's concurrency permits. Bounded just
+        // under the presigned POST's own ten-minute expiry: past that the target
+        // is dead anyway and the retry has to re-reserve to get a fresh one.
+        .callTimeout(9, TimeUnit.MINUTES)
         .build()
 
     val api: NetworkPeerApi = Retrofit.Builder()
