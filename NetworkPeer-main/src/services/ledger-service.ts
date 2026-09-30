@@ -43,6 +43,12 @@ function databaseErrorCode(err: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
+function databaseErrorMessage(err: unknown): string | null {
+  if (typeof err !== "object" || err === null || !("message" in err)) return null;
+  const message = (err as { message?: unknown }).message;
+  return typeof message === "string" ? message : null;
+}
+
 function mapDatabaseError(err: unknown): never {
   if (err instanceof LedgerServiceError || err instanceof PaymentGatewayError) throw err;
   const code = databaseErrorCode(err);
@@ -50,6 +56,18 @@ function mapDatabaseError(err: unknown): never {
   if (code === "42501") throw new LedgerServiceError("FORBIDDEN", "The requested operation is not allowed", 403);
   if (code === "23505") throw new LedgerServiceError("IDEMPOTENCY_KEY_REUSED", "The idempotency key was reused with different input", 409);
   if (code === "55000" || code === "23514" || code === "40001") {
+    // Migration 051 refuses to approve a job, or release its escrow, when the job
+    // holds no confirmed evidence -- the settlement function itself only checked
+    // status and escrow_status, so an empty job could be paid out. Reporting that
+    // as a generic state conflict would leave the client with no idea why their
+    // approval was refused.
+    if (databaseErrorMessage(err)?.toLowerCase().includes("without evidence")) {
+      throw new LedgerServiceError(
+        "EVIDENCE_REQUIRED_FOR_PAYOUT",
+        "This job cannot be approved because the worker has not uploaded any evidence",
+        409,
+      );
+    }
     throw new LedgerServiceError("FINANCIAL_OPERATION_CONFLICT", "The requested financial operation is not allowed in the current state", 409);
   }
   if (code === "22023") throw new LedgerServiceError("VALIDATION_ERROR", "The financial request is invalid", 400);

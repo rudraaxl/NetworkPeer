@@ -139,6 +139,12 @@ function ReviewPage() {
   }
 
   const uploaded = evidence.filter((e) => e.status === "UPLOADED" || e.status === "VERIFIED");
+  // Approving is what releases the escrow. Migration 051 makes the database refuse
+  // to release it for a job with no confirmed evidence -- the settlement function
+  // had only ever checked status and escrow_status, so an empty job could be paid
+  // out. Mirroring the rule here means the client is told why rather than having a
+  // press rejected, and it matches the same predicate the database uses.
+  const hasEvidence = uploaded.length > 0;
 
   if (job.status === "APPROVED" || job.status === "COMPLETED") {
     return (
@@ -282,13 +288,19 @@ function ReviewPage() {
               Approving releases escrow to the worker and records the settlement in the immutable
               ledger.
             </p>
+            {!hasEvidence && (
+              <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                This job has no uploaded evidence, so it cannot be approved. Ask the worker to
+                upload their photos, or open a dispute.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => void approveJob()}
-              disabled={isApproving || job.status !== "SUBMITTED"}
+              disabled={isApproving || job.status !== "SUBMITTED" || !hasEvidence}
               className={cn(
                 "press mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold",
-                job.status === "SUBMITTED"
+                job.status === "SUBMITTED" && hasEvidence
                   ? "bg-success text-success-foreground"
                   : "cursor-not-allowed bg-muted text-muted-foreground",
               )}

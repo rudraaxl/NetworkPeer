@@ -20,6 +20,17 @@ const MIME_TYPES: Readonly<Record<MediaType, readonly string[]>> = {
 };
 const POST_FORM_OVERHEAD_BYTES = 64 * 1024;
 
+/**
+ * Distinguishes migration 051's "no evidence at all" guards from the older
+ * per-required-subtask guard. They deliberately share SQLSTATE 23514 so existing
+ * clients keep working, so the message is the only discriminator available.
+ */
+function databaseErrorMentionsMissingEvidence(err: unknown): boolean {
+  if (typeof err !== "object" || err === null || !("message" in err)) return false;
+  const message = (err as { message?: unknown }).message;
+  return typeof message === "string" && message.toLowerCase().includes("without evidence");
+}
+
 export class WorkEvidenceServiceError extends Error {
   readonly code: string;
   readonly statusCode: number;
@@ -325,6 +336,18 @@ export class WorkEvidenceService {
       const code = databaseErrorCode(err);
       if (code === "P0002") throw new WorkEvidenceServiceError("JOB_NOT_FOUND", "Job not found", 404);
       if (code === "23514") {
+        // Migration 051 added a floor beneath the per-subtask rule: a job must
+        // carry at least one confirmed file whatever its checklist looks like.
+        // Both conditions raise 23514, so the message distinguishes them --
+        // "upload something" and "you have missed a required step" are different
+        // instructions to give a worker standing in front of the job.
+        if (databaseErrorMentionsMissingEvidence(err)) {
+          throw new WorkEvidenceServiceError(
+            "EVIDENCE_REQUIRED",
+            "Upload at least one photo before submitting this job",
+            409,
+          );
+        }
         throw new WorkEvidenceServiceError(
           "REQUIRED_EVIDENCE_INCOMPLETE",
           "Required subtask evidence is incomplete",

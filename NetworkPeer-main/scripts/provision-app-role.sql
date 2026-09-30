@@ -59,6 +59,8 @@ REVOKE EXECUTE ON FUNCTION set_worker_verification(UUID, VARCHAR, BOOLEAN) FROM 
 REVOKE EXECUTE ON FUNCTION confirm_job_subtask_media_upload(UUID, UUID, BIGINT, VARCHAR, VARCHAR, TEXT, TEXT) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION submit_job_with_evidence(UUID, UUID) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION enforce_job_submission_evidence() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION enforce_job_payout_evidence() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION job_has_usable_evidence(UUID) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION advance_worker_job_status(UUID, UUID, job_status) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION emit_user_sync_event(UUID, VARCHAR, VARCHAR, UUID, JSONB, VARCHAR, TEXT, BOOLEAN) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION emit_job_sync_events() FROM PUBLIC;
@@ -115,6 +117,7 @@ GRANT SELECT, INSERT, UPDATE (user_id, platform, is_active, last_seen_at, update
 GRANT SELECT ON admin_audit_log TO networkpeer_app;
 GRANT EXECUTE ON FUNCTION accept_job(UUID, UUID) TO networkpeer_app;
 GRANT EXECUTE ON FUNCTION submit_job_with_evidence(UUID, UUID) TO networkpeer_app;
+GRANT EXECUTE ON FUNCTION job_has_usable_evidence(UUID) TO networkpeer_app;
 GRANT EXECUTE ON FUNCTION advance_worker_job_status(UUID, UUID, job_status) TO networkpeer_app;
 GRANT EXECUTE ON FUNCTION update_worker_location(UUID, DOUBLE PRECISION, DOUBLE PRECISION) TO networkpeer_app;
 GRANT EXECUTE ON FUNCTION cancel_client_job(UUID, UUID, TEXT) TO networkpeer_app;
@@ -134,6 +137,7 @@ GRANT SELECT ON users, worker_profiles, jobs, wallet_ledger, admin_audit_log TO 
 GRANT EXECUTE ON FUNCTION admin_override_job(UUID, UUID, VARCHAR, job_status, UUID, TEXT, TEXT) TO networkpeer_admin_api;
 GRANT EXECUTE ON FUNCTION admin_set_worker_verification(UUID, UUID, VARCHAR, BOOLEAN, TEXT) TO networkpeer_admin_api;
 GRANT EXECUTE ON FUNCTION admin_suspend_user(UUID, UUID, TEXT) TO networkpeer_admin_api;
+GRANT EXECUTE ON FUNCTION job_has_usable_evidence(UUID) TO networkpeer_admin_api;
 GRANT EXECUTE ON FUNCTION refund_client_job(UUID, UUID, TEXT, VARCHAR, CHAR(64)) TO networkpeer_admin_api;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM networkpeer_media_verifier;
